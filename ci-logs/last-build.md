@@ -1,4 +1,4 @@
-# build log 2026-11-02T17:16:37Z
+# build log 2026-11-02T17:27:02Z
 
 ## make package
 ```
@@ -27,18 +27,18 @@ ld: warning: -multiply_defined is obsolete
 [0;34m==> [1;39mMerging tweak PhigrosAuto…[m
 [0;34m==> [1;39mSigning PhigrosAuto…[m
 [1;31m> [1;3;39mMaking stage for tweak PhigrosAuto…[m
-dm.pl: building package `com.yg.phigrosauto:iphoneos-arm64' in `./packages/com.yg.phigrosauto_1.5.0_iphoneos-arm64.deb'
+dm.pl: building package `com.yg.phigrosauto:iphoneos-arm64' in `./packages/com.yg.phigrosauto_1.6.0_iphoneos-arm64.deb'
 ```
 
 ## package
 ```
 === ls packages ===
 total 48
--rw-r--r--  1 runner  staff    23K Nov  2 17:16 com.yg.phigrosauto_1.5.0_iphoneos-arm64.deb
-DEB=packages/com.yg.phigrosauto_1.5.0_iphoneos-arm64.deb
+-rw-r--r--  1 runner  staff    23K Nov  2 17:27 com.yg.phigrosauto_1.6.0_iphoneos-arm64.deb
+DEB=packages/com.yg.phigrosauto_1.6.0_iphoneos-arm64.deb
 === dpkg-deb -I ===
  new Debian package, version 2.0.
- size 23098 bytes: control archive=347 bytes.
+ size 23732 bytes: control archive=348 bytes.
      255 bytes,    10 lines      control
  Package: com.yg.phigrosauto
  Name: PhigrosAuto
@@ -48,20 +48,20 @@ DEB=packages/com.yg.phigrosauto_1.5.0_iphoneos-arm64.deb
  Section: Tweaks
  Depends: mobilesubstrate
  Architecture: iphoneos-arm64
- Version: 1.5.0
- Installed-Size: 212
+ Version: 1.6.0
+ Installed-Size: 216
 === dpkg-deb -c ===
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 .
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb/Library
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb/Library/MobileSubstrate
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb/Library/MobileSubstrate/DynamicLibraries
--rwxr-xr-x root/wheel   206768 2026-11-02 17:16 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
--rw-r--r-- root/wheel       95 2026-11-02 17:16 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb/usr
-drwxr-xr-x root/wheel        0 2026-11-02 17:16 var/jb/usr/bin
--rwxr-xr-x root/wheel     3709 2026-11-02 17:16 var/jb/usr/bin/phprobe
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 .
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 var
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 var/jb
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 var/jb/Library
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 var/jb/Library/MobileSubstrate
+drwxr-xr-x root/wheel        0 2026-11-02 17:27 var/jb/Library/MobileSubstrate/DynamicLibraries
+-rwxr-xr-x root/wheel   206768 2026-11-02 17:27 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r-- root/wheel       95 2026-11-02 17:27 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+drwxr-xr-x root/wheel        0 2026-11-02 17:26 var/jb/usr
+drwxr-xr-x root/wheel        0 2026-11-02 17:26 var/jb/usr/bin
+-rwxr-xr-x root/wheel     5430 2026-11-02 17:26 var/jb/usr/bin/phprobe
 ```
 
 ## verify
@@ -72,9 +72,9 @@ WARN 包内含 /var/jb/ 前缀
 OK   含 PhigrosAuto.dylib
 OK   含 PhigrosAuto.plist
 extract rc=0
--rwxr-xr-x  1 runner  wheel  3709 Nov  2 17:16 /tmp/debx/var/jb/usr/bin/phprobe
--rwxr-xr-x  1 runner  wheel  206768 Nov  2 17:16 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
--rw-r--r--  1 runner  wheel  95 Nov  2 17:16 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+-rwxr-xr-x  1 runner  wheel  5430 Nov  2 17:26 /tmp/debx/var/jb/usr/bin/phprobe
+-rwxr-xr-x  1 runner  wheel  206768 Nov  2 17:27 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r--  1 runner  wheel  95 Nov  2 17:27 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
 dylib archs: arm64 arm64e
 OK   dylib 含 arm64e 切片
 OK   control 无重复字段
