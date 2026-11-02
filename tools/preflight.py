@@ -146,6 +146,22 @@ def check_layout_scripts():
         fail("layout/usr/bin/phprobe 缺 shebang")
 
 
+def check_makefile():
+    """Makefile 少一行 include 就会让 THEOS_MAKE_PATH 变空，整次构建失败。"""
+    p = ROOT / "Makefile"
+    if not p.exists():
+        fail("Makefile 缺失")
+        return
+    txt = p.read_text(encoding="utf-8", errors="replace")
+    for must in ("$(THEOS)/makefiles/common.mk",
+                 "$(THEOS_MAKE_PATH)/tweak.mk",
+                 "$(THEOS_PROJECT_DIR)"):
+        if must not in txt:
+            fail(f"Makefile 缺 {must}")
+    if "TWEAK_NAME" not in txt:
+        fail("Makefile 缺 TWEAK_NAME")
+
+
 def main():
     check_required_files()
     check_plist()
@@ -154,6 +170,7 @@ def main():
     check_braces()
     check_macros()
     check_layout_scripts()
+    check_makefile()
 
     if FAILS:
         print("静态自检失败：")
