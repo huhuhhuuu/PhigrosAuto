@@ -1,6 +1,7 @@
 #import "NoteModel.h"
 #import "IL2CPP.h"
 #import "Config.h"
+#import "PHLog.h"
 #import <string.h>
 #import <stdio.h>
 #import <stdarg.h>
@@ -43,7 +44,7 @@ static void PHModelLog(NSString *fmt, ...) {
     va_start(ap, fmt);
     NSString *s = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    NSLog(@"[PhigrosAuto] %@", s);
+    PHLogWrite(@"%@", s);
 }
 
 // 用 il2cpp 元数据的字段类型名判定 float/double，权威且无需猜测

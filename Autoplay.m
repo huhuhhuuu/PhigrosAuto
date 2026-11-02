@@ -2,6 +2,7 @@
 #import "NoteModel.h"
 #import "IOHIDTouch.h"
 #import "Config.h"
+#import "PHLog.h"
 #import <UIKit/UIKit.h>
 #import <string.h>
 
@@ -22,10 +23,10 @@ static CFMutableSetRef gHandled = NULL;   // 已经按过的音符（原始指�
 static int32_t       gLastCount = -1;
 static void         *gLastFirst = NULL;
 
-static void PHLog(NSString *fmt, ...) {
+static void PHAutoLog(NSString *fmt, ...) {
     if (!gVerbose) return;
     va_list ap; va_start(ap, fmt);
-    NSLog(@"[PhigrosAuto] %@", [[NSString alloc] initWithFormat:fmt arguments:ap]);
+    PHLogWrite(@"%@", [[NSString alloc] initWithFormat:fmt arguments:ap]);
     va_end(ap);
 }
 
@@ -77,7 +78,7 @@ void PHAutoplayReset(void) {
 void PHAutoplaySetEnabled(BOOL on) {
     gEnabled = on;
     if (!on) PHAutoplayReset();
-    PHLog(@"autoplay %@", on ? @"ON" : @"OFF");
+    PHAutoLog(@"autoplay %@", on ? @"ON" : @"OFF");
 }
 
 BOOL PHAutoplayIsEnabled(void) { return gEnabled; }
@@ -99,7 +100,7 @@ static void PHDetectChartChange(int count, void **items, double now) {
                       (count < gLastCount * 7 / 10 || count > gLastCount * 13 / 10));
 
     if (gLastCount >= 0 && (timeBack || hugeShift)) {
-        PHLog(@"chart changed (timeBack=%d hugeShift=%d count %d->%d)", timeBack, hugeShift, gLastCount, count);
+        PHAutoLog(@"chart changed (timeBack=%d hugeShift=%d count %d->%d)", timeBack, hugeShift, gLastCount, count);
         PHAutoplayReset();
     }
 
@@ -175,6 +176,6 @@ void PHAutoplayTick(void) {
         }
 
         PHHandledAdd(note);
-        PHLog(@"hit t=%.3f now=%.3f hold=%.3f slot=%d x=%.1f", t, now, hold, slot, s->x);
+        PHAutoLog(@"hit t=%.3f now=%.3f hold=%.3f slot=%d x=%.1f", t, now, hold, slot, s->x);
     }
 }

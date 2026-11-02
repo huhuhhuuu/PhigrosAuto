@@ -30,6 +30,7 @@ def check_required_files():
         "Makefile", "control", "Tweak.m", "Config.h",
         "IL2CPP.h", "IL2CPP.m", "Autoplay.h", "Autoplay.m",
         "NoteModel.h", "NoteModel.m", "IOHIDTouch.h", "IOHIDTouch.m",
+        "PHLog.h", "PHLog.m",
         "PhigrosAuto.plist",
     ]
     for f in required:
@@ -66,7 +67,8 @@ def check_control():
 def check_header_impl():
     """头文件里以分号结尾的函数声明，.m 里必须有定义。static inline 除外。"""
     pairs = [("IL2CPP.h", "IL2CPP.m"), ("Autoplay.h", "Autoplay.m"),
-             ("NoteModel.h", "NoteModel.m"), ("IOHIDTouch.h", "IOHIDTouch.m")]
+             ("NoteModel.h", "NoteModel.m"), ("IOHIDTouch.h", "IOHIDTouch.m"),
+             ("PHLog.h", "PHLog.m")]
     for h, m in pairs:
         hp, mp = ROOT / h, ROOT / m
         if not hp.exists() or not mp.exists():
