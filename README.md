@@ -13,7 +13,7 @@ Phigros iOS 越狱插件：全自动打歌（代打 + 自动判定 + 完美连�
    合成多点触点，绕过 UIKit 手势层，120Hz 下每帧只推一个事件，抖动 1~2ms。
 3. **调度层**（`Autoplay.m`）：每帧读在谱音符，`now >= noteTime` 即落指；长条按住到
    `noteTime + holdTime`；flick 在松开前补一次上划位移。已按音符用指针集合记账，不会重复触发。
-4. **驱动层**（`Tweak.xm`）：`CADisplayLink` 跟随 ProMotion，悬浮按钮开关 + 长按开日志。
+4. **驱动层**（`Tweak.m`）：`CADisplayLink` 跟随 ProMotion，悬浮按钮开关 + 长按开日志。
 
 ## 构建
 
@@ -98,7 +98,7 @@ frida -U -f com.PigeonGames.Phigros -l _discover.js --no-pause
 
 拿到参数个数后，用同样的 IL2CPP 解析 + `MSHookFunction` 挂钩方法指针，把判定结果参数钳到
 Perfect 分支。注意这类改写会让客户端状态与服务端校验出现偏差，建议只在小号上用。
-默认工程**不启用**这层，`Tweak.xm` 未包含任何内存写入。
+默认工程**不启用**这层，`Tweak.m` 未包含任何内存写入。
 
 ## 已知不确定项
 

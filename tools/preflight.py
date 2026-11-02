@@ -27,7 +27,7 @@ def fail(msg):
 
 def check_required_files():
     required = [
-        "Makefile", "control", "Tweak.xm", "Config.h",
+        "Makefile", "control", "Tweak.m", "Config.h",
         "IL2CPP.h", "IL2CPP.m", "Autoplay.h", "Autoplay.m",
         "NoteModel.h", "NoteModel.m", "IOHIDTouch.h", "IOHIDTouch.m",
         "PhigrosAuto.plist",
@@ -100,7 +100,7 @@ def check_macros():
     """代码里用到的 kXxx 宏，Config.h 里必须定义。"""
     cfg = (ROOT / "Config.h").read_text(encoding="utf-8")
     defined = set(re.findall(r"#define\s+(k\w+)", cfg))
-    for name in ["Autoplay.m", "Tweak.xm", "IOHIDTouch.m"]:
+    for name in ["Autoplay.m", "Tweak.m", "IOHIDTouch.m"]:
         p = ROOT / name
         if not p.exists():
             continue

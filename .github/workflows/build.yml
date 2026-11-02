@@ -57,10 +57,33 @@ jobs:
           dpkg-deb --version | head -1
 
       - name: Build rootless
+        id: build
         run: |
           set -o pipefail
           make clean || true
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 DEBUG=0 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Publish build log to repo (so it can be read without admin)
+        if: always()
+        run: |
+          set +e
+          mkdir -p ci-logs
+          {
+            echo "# build log $(date -u +%FT%TZ)"
+            echo '```'
+            tail -200 build.log 2>/dev/null || echo "no build.log"
+            echo '```'
+          } > ci-logs/last-build.md
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@local"
+          git add -f ci-logs/last-build.md
+          git commit -q -m "ci: build log $(date -u +%s)" || true
+          git push origin HEAD:main || echo "push failed (probably protected branch)"
+
+      - name: Fail if build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
 
       - name: Verify package
         run: |
@@ -81,11 +104,3 @@ jobs:
           name: PhigrosAuto-rootless
           path: packages/*.deb
           if-no-files-found: error
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: build.log
-          if-no-files-found: ignore
