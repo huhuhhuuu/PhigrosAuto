@@ -420,6 +420,7 @@ __attribute__((constructor))
 static void PHInit(void) {
     PHLogInit();
     PHLogWrite(@"==== dylib 已注入 (pid %d) ====", (int)getpid());
+    PHLogWrite(@"日志实际写入: %s", PHLogCurrentPath());
 
     // 主线程装配 UI 与 CADisplayLink
     dispatch_async(dispatch_get_main_queue(), ^{

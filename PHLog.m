@@ -6,34 +6,80 @@
 #import <pthread.h>
 #import <string.h>
 #import <sys/stat.h>
+#import <limits.h>
 
 static pthread_mutex_t gLogLock = PTHREAD_MUTEX_INITIALIZER;
 static FILE           *gLogFP = NULL;
 static size_t          gLogBytes = 0;
+static char            gLogPath[PATH_MAX] = {0};
 
 // 超过这个大小就滚动一次：旧文件改名为 .1，新文件重开。
 // 限大小是为了长时间挂机时不把手机存储写满。
 #define PH_LOG_MAX  (2 * 1024 * 1024)   // 2MB
 
+// ============================================================
+// 日志落盘位置 —— 这里踩过一个大坑
+//
+// 最初固定写 /var/mobile/PhigrosAuto.log，结果文件从来不存在：
+// 插件跑在游戏进程里，而游戏是受沙盒约束的 App，/var/mobile 根目录
+// 对它不可写，fopen 直接返回 NULL，且不报错。表现就是"看不到日志"，
+// 很容易误判成"dylib 没注入"。
+//
+// 正确做法是按可写性依次尝试，第一个能打开的就用它：
+//   1) 自身沙盒的 Documents —— 一定有权限（rootless 越狱下路径在
+//      /var/mobile/Containers/Data/Application/<UUID>/Documents/）
+//   2) /var/mobile/Media/PhigrosAuto.log —— media 分区对 App 可写
+//   3) /var/mobile/PhigrosAuto.log —— 越狱进程/enable 后可写
+//   4) /tmp/PhigrosAuto.log —— 最后兜底
+// ============================================================
+
+// 候选路径，按可写性从高到低
+static NSArray<NSString *> *PHLogCandidateList(void) {
+    NSMutableArray<NSString *> *cands = [NSMutableArray array];
+    // 1) 自身沙盒 Documents —— 一定有权限
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
+                                                         NSUserDomainMask, YES).firstObject;
+    if (docs.length) {
+        [cands addObject:[docs stringByAppendingPathComponent:@"PhigrosAuto.log"]];
+    }
+    // 2) media 分区（App 可写）
+    [cands addObject:@"/var/mobile/Media/PhigrosAuto.log"];
+    // 3) 传统位置（越狱进程可写）
+    [cands addObject:@"/var/mobile/PhigrosAuto.log"];
+    // 4) 兜底
+    [cands addObject:@"/tmp/PhigrosAuto.log"];
+    return cands;
+}
+
 void PHLogInit(void) {
     pthread_mutex_lock(&gLogLock);
     if (gLogFP) { pthread_mutex_unlock(&gLogLock); return; }
 
-    // 先滚动：把上次的日志留一份
-    struct stat st;
-    if (stat(PH_LOG_PATH, &st) == 0 && st.st_size > (off_t)PH_LOG_MAX) {
-        char bak[256];
-        snprintf(bak, sizeof(bak), "%s.1", PH_LOG_PATH);
-        rename(PH_LOG_PATH, bak);
+    for (NSString *path in PHLogCandidateList()) {
+        FILE *fp = fopen(path.UTF8String, "a");
+        if (fp) {
+            gLogFP = fp;
+            strlcpy(gLogPath, path.UTF8String, sizeof(gLogPath));
+            struct stat st;
+            gLogBytes = (stat(gLogPath, &st) == 0 && st.st_size > 0)
+                        ? (size_t)st.st_size : 0;
+            chmod(gLogPath, 0644);   // 让 root/terminal 也能读
+            break;
+        }
     }
 
-    gLogFP = fopen(PH_LOG_PATH, "a");
-    if (gLogFP) {
-        gLogBytes = (size_t)(st.st_size > 0 ? st.st_size : 0);
-        // 让 mobile 用户也能读，方便 Sileo 文件管理器直接打开
-        chmod(PH_LOG_PATH, 0644);
+    // 一个都打不开：至少把尝试过的路径打到 console，方便从别处看到
+    if (!gLogFP) {
+        fprintf(stderr, "[PhigrosAuto] 所有日志路径都不可写: %s\n",
+                [[PHLogCandidateList() componentsJoinedByString:@" "] UTF8String]);
     }
+
     pthread_mutex_unlock(&gLogLock);
+}
+
+// 供面板/诊断显示当前实际日志路径
+const char *PHLogCurrentPath(void) {
+    return gLogPath[0] ? gLogPath : "(未打开)";
 }
 
 void PHLogWrite(NSString *fmt, ...) {

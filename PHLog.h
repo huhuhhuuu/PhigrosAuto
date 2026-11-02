@@ -18,8 +18,13 @@
 
 void PHLogInit(void);
 void PHLogWrite(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
+const char *PHLogCurrentPath(void);   // 实际生效的日志路径（沙盒内外不同）
 
-// 当前日志文件绝对路径（终端里用）
+// 日志会按可写性依次尝试以下位置，第一个能打开的生效：
+//   1) 自身沙盒 Documents/PhigrosAuto.log
+//   2) /var/mobile/Media/PhigrosAuto.log
+//   3) /var/mobile/PhigrosAuto.log
+//   4) /tmp/PhigrosAuto.log
 #define PH_LOG_PATH "/var/mobile/PhigrosAuto.log"
 
 #endif

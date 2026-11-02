@@ -1,6 +1,6 @@
 Package: com.yg.phigrosauto
 Name: PhigrosAuto
-Version: 1.3.0
+Version: 1.4.0
 Architecture: iphoneos-arm64
 Description: Phigros 全自动打歌 — 代打 / 自动判定 / 完美连击
 Maintainer: YG

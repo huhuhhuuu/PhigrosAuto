@@ -8,7 +8,7 @@
 # 或者直接在终端里逐条敲下面的 SECTION。
 
 DL=/var/jb/Library/MobileSubstrate/DynamicLibraries
-LOG=/var/mobile/PhigrosAuto.log
+LOG=/var/mobile/Media/PhigrosAuto.log
 
 echo "========== 1. 装的哪个版本 =========="
 # 不用 dpkg -l（可能没装 dpkg 或路径不同），直接看包数据库里的版本文件
@@ -41,16 +41,32 @@ done
 
 echo
 echo "========== 5. 日志（决定性证据） =========="
-if [ -f "$LOG" ]; then
-  echo "  存在 / $(wc -l < "$LOG") 行 / $(wc -c < "$LOG") 字节"
-  echo "  --- 内容 ---"
-  cat "$LOG"
+# 日志可能落在 4 个位置，游戏进程在沙盒内，通常只有 App 自己的
+# Documents 可写，所以优先去容器里找。
+FOUND=""
+for p in \
+  /var/mobile/Media/PhigrosAuto.log \
+  /var/mobile/PhigrosAuto.log \
+  /tmp/PhigrosAuto.log ; do
+  [ -f "$p" ] && FOUND="$FOUND $p"
+done
+# 沙盒容器里扫一遍（Dopamine rootless：/var/mobile/Containers/Data/Application/<UUID>/Documents）
+for p in /var/mobile/Containers/Data/Application/*/Documents/PhigrosAuto.log ; do
+  [ -f "$p" ] && FOUND="$FOUND $p"
+done
+
+if [ -n "$FOUND" ]; then
+  echo "  找到日志:$FOUND"
+  for p in $FOUND ; do
+    echo "  --- $p ---"
+    cat "$p"
+  done
 else
-  echo "  不存在: $LOG"
+  echo "  四个位置都没有日志文件。"
   echo
   echo "  => dylib 没有进入游戏进程，或 constructor 没跑到。"
   echo "     先做这两件事再看一次："
-  echo "       1) 确认装的是 1.2.0（见上面第 1 节）"
+  echo "       1) 确认装的是 1.4.0（见上面第 1 节）"
   echo "       2) killall -9 SpringBoard   然后重新打开游戏"
 fi
 
