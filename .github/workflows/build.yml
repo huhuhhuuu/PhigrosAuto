@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# 默认 token 是只读的，失败时要把编译日志提交回仓库供排查，必须显式放开
+permissions:
+  contents: write
+
 jobs:
   # ------------------------------------------------------------
   # 第一步：在便宜的 Linux 机器上做静态检查，抓语法/明显错误，
@@ -35,7 +39,9 @@ jobs:
       - name: Install toolchain
         run: |
           set -euo pipefail
+          # fakeroot 在 macOS 上 Theos 打包 .deb 时需要；homebrew 无此 formula 时退回 dpkg-deb 直构
           brew install ldid xz || true
+          brew install dpkg || brew install dpkg-sig || true
           if [ ! -d "$HOME/theos" ]; then
             git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
           fi
@@ -46,7 +52,10 @@ jobs:
             unzip -q /tmp/sdks.zip -d /tmp/sdks
             mv /tmp/sdks/sdks-master/*.sdk "$HOME/theos/sdks/"
           fi
-          ls "$HOME/theos/sdks"
+          echo "--- sdks ---"; ls "$HOME/theos/sdks"
+          echo "--- tools ---"
+          command -v dpkg-deb || echo "NO dpkg-deb"
+          command -v fakeroot || echo "NO fakeroot (Theos 会退回 dpkg-deb 直构)"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
           echo "PATH=$HOME/theos/bin:$PATH" >> "$GITHUB_ENV"
 
@@ -55,6 +64,10 @@ jobs:
           set -e
           if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
           dpkg-deb --version | head -1
+          # Theos 打包需要 fakeroot 或等效手段；缺了就装
+          if ! command -v fakeroot >/dev/null 2>&1; then
+            brew install fakeroot 2>/dev/null || echo "fakeroot 不可用，Theos 将用 dpkg-deb 直接打包"
+          fi
 
       - name: Build rootless
         id: build
