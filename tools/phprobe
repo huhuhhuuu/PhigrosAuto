@@ -17,6 +17,7 @@ PLIST_BID=""
 BID_MISMATCH=0
 INJECTED=0
 GAME_UP=0
+PROBE_OK=0
 LOGS=""
 MARKERS=""
 RH_HITS=""
@@ -172,12 +173,26 @@ for p in /var/mobile/Media/PhigrosAuto.marker /tmp/PhigrosAuto.marker; do
 done
 if [ -n "$MARKERS" ]; then
   for p in $MARKERS; do
-    echo "    找到 $p"
-    echo "      最后一条: $(tail -1 "$p" 2>/dev/null)"
+    echo "    [游戏] $p"
+    echo "           $(tail -1 "$p" 2>/dev/null)"
   done
   INJECTED=1
 else
-  echo "    没有 => dylib 未进入游戏进程"
+  echo "    [游戏] 没有 => PhigrosAuto 未进入游戏进程"
+fi
+
+# 对照探针：装在 SpringBoard，与游戏无关
+PROBE_MARK=""
+for p in /var/mobile/Media/PHProbe.marker /tmp/PHProbe.marker; do
+  [ -f "$p" ] && PROBE_MARK="$p"
+done
+if [ -n "$PROBE_MARK" ]; then
+  echo "    [桌面] $PROBE_MARK"
+  echo "           $(tail -1 "$PROBE_MARK" 2>/dev/null)"
+  PROBE_OK=1
+else
+  echo "    [桌面] 没有 => 连 SpringBoard 都没注入"
+  PROBE_OK=0
 fi
 
 # ---------- 7. 日志 ----------
@@ -229,22 +244,34 @@ elif [ "$INJECTED" = "1" ]; then
   echo " A) dylib 已注入并执行 —— 注入链路正常。"
   [ -n "$LOGS" ] && echo "    看第 7 节日志判断卡在哪。" \
                  || echo "    日志没写成功，但心跳已证明注入 OK。"
-else
-  echo " B) dylib 未注入。"
+elif [ "$PROBE_OK" = "1" ]; then
+  echo " C) 注入链正常（桌面探针已写入），但游戏没被注入。"
   echo
-  echo " 先看第 2 节：PhigrosAuto.dylib 是否真的在 DynamicLibraries 里，"
-  echo " 以及 /var/jb/usr/lib/DynamicPatches 下有没有它的副本。"
+  echo "    这排除了 ElleKit 本身的问题，问题只可能在 Phigros 这一侧："
+  echo "      · filter 里的 bundle id 与游戏实际 id 不一致"
+  echo "      · RootHide 把 Phigros 列入隐藏名单，主动抑制注入"
+  echo "      · 游戏是从后台恢复的，不是冷启动"
   echo
-  if [ -d /var/jb/usr/lib/DynamicPatches ]; then
-    echo " ★ 你的机器装了 RootHide（DynamicPatches 存在）。"
-    echo "   RootHide 会把插件重定位后再加载，若它没把 Phigros 列入"
-    echo "   「注入白名单」，dylib 就永远不会进这个进程。"
-    echo "   去 RootHide 设置里把 Phigros 设为可见/不隐藏。"
-  fi
   if [ "$BID_MISMATCH" = "1" ]; then
-    echo " ★ bundle id 不匹配：plist=$PLIST_BID 实际=$BID（把实际值发我）"
+    echo "    ★ 已确认 bundle id 不匹配：plist=$PLIST_BID 实际=$BID"
+    echo "      把实际值发我，我改完重新打包。"
+  else
+    echo "    第 4 节若显示「仍读不出」，请手动执行这条并把输出发我："
+    echo "      tr -d '\\0' < /var/containers/Bundle/Application/*/Phigros.app/Info.plist | grep -ao 'com\\.[A-Za-z0-9._-]*' | grep -vi apple | head"
   fi
+  if [ -n "$RH_HITS" ]; then
+    echo
+    echo "    ★ RootHide 偏好里出现了 Phigros（第 5 节），"
+    echo "      去 RootHide 设置里把它移出隐藏名单。"
+  fi
+else
+  echo " D) 连 SpringBoard 都没被注入 —— 注入链本身没工作。"
   echo
-  echo " 另外确认：从多任务彻底划掉 Phigros 再冷启动，不是从后台切回。"
+  echo "    这时与你写的插件代码完全无关。按顺序查："
+  echo "      1. ElleKit 装了吗："
+  echo "         dpkg -l | grep -i ellekit"
+  echo "      2. 桌面确实重启过吗：killall -9 SpringBoard 之后等 10 秒"
+  echo "      3. DynamicLibraries 是否被指向了不存在的目录（看第 2 节的链接）"
+  echo "      4. 若装了 RootHide，先把它整个关掉再测"
 fi
 echo "=============================================="
