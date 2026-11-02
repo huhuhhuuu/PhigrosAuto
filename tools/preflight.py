@@ -63,6 +63,24 @@ def check_control():
     if not re.search(r"^Architecture: iphoneos-arm64", txt, re.M):
         fail("control 的 Architecture 必须是 iphoneos-arm64（rootless）")
 
+    # 字段名重复会让 dpkg 直接拒绝解析整包（duplicate value for field）。
+    # 典型踩坑：手写 Installed-Size，而 Theos 打包时会自己生成一行，两行并存即报错。
+    seen = {}
+    for line in txt.splitlines():
+        m = re.match(r"^([A-Za-z][A-Za-z0-9-]*):", line)
+        if not m:
+            continue
+        key = m.group(1).lower()
+        seen[key] = seen.get(key, 0) + 1
+    for key, n in seen.items():
+        if n > 1:
+            fail(f"control 字段 '{key}' 出现 {n} 次（dpkg 会报 duplicate value）")
+
+    # Theos 会自动生成这两个字段，手动写必然重复
+    for auto in ("installed-size", "md5sum", "sha1", "sha256"):
+        if auto in seen:
+            fail(f"control 不要手写 {auto}，Theos 打包时会自动生成，重复即安装失败")
+
 
 def check_header_impl():
     """头文件里以分号结尾的函数声明，.m 里必须有定义。static inline 除外。"""

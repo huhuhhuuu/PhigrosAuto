@@ -129,6 +129,17 @@ jobs:
           ARCHS_HIT=$(find /tmp/debx -name 'PhigrosAuto.dylib' -exec lipo -archs {} \; 2>&1)
           echo "dylib archs: ${ARCHS_HIT:-unknown}"
           check "dylib 含 arm64e 切片" "echo '$ARCHS_HIT' | grep -q arm64e"
+          # 防止 control 里字段重复导致设备上 dpkg 拒绝解析整包
+          dpkg-deb -f "$DEB" > /tmp/ctrl.txt 2>&1
+          DUP=$(sed -n 's/^\([A-Za-z][A-Za-z0-9-]*\):.*/\1/p' /tmp/ctrl.txt \
+                | tr 'A-Z' 'a-z' | sort | uniq -d)
+          if [ -n "$DUP" ]; then
+            echo "::error::control 里有重复字段: $DUP"
+            FAIL=1
+          else
+            echo "OK   control 无重复字段"
+          fi
+
           echo "--- verify result: FAIL=$FAIL ---"
           } 2>&1 | tee verify.log
 
