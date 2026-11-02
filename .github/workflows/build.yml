@@ -5,13 +5,13 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-# 默认 token 是只读的，失败时要把编译日志提交回仓库供排查，必须显式放开
+# 默认 token 只读；失败时要把编译日志与包信息提交回仓库供排查，必须显式放开
 permissions:
   contents: write
 
 jobs:
   # ------------------------------------------------------------
-  # 第一步：在便宜的 Linux 机器上做静态检查，抓语法/明显错误，
+  # 第一步：Linux 上做静态检查，抓文件缺失/配置错误，
   # 省掉 macOS 分钟数。这一步红了就不用看后面。
   # ------------------------------------------------------------
   lint:
@@ -39,9 +39,7 @@ jobs:
       - name: Install toolchain
         run: |
           set -euo pipefail
-          # fakeroot 在 macOS 上 Theos 打包 .deb 时需要；homebrew 无此 formula 时退回 dpkg-deb 直构
           brew install ldid xz || true
-          brew install dpkg || brew install dpkg-sig || true
           if [ ! -d "$HOME/theos" ]; then
             git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
           fi
@@ -53,22 +51,19 @@ jobs:
             mv /tmp/sdks/sdks-master/*.sdk "$HOME/theos/sdks/"
           fi
           echo "--- sdks ---"; ls "$HOME/theos/sdks"
-          echo "--- tools ---"
-          command -v dpkg-deb || echo "NO dpkg-deb"
-          command -v fakeroot || echo "NO fakeroot (Theos 会退回 dpkg-deb 直构)"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
           echo "PATH=$HOME/theos/bin:$PATH" >> "$GITHUB_ENV"
 
-      - name: Ensure dpkg-deb available
+      - name: Ensure dpkg-deb, drop incompatible fakeroot
         run: |
           set -e
           if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
           dpkg-deb --version | head -1
-          # 注意：不要装 homebrew 的 fakeroot。它编的是 arm64 的 libfakeroot.dylib，
-          # 在 arm64e 进程里会被 dyld 拒绝加载并 Abort trap 6，导致 make package 直接失败。
-          # Theos 在缺少 fakeroot 时会退回 _theos_fake_root，一样能出 deb。
+          # 不要用 homebrew 的 fakeroot：它编的是 arm64 的 libfakeroot.dylib，
+          # 在 arm64e 进程里会被 dyld 拒绝加载并 Abort trap 6，make package 直接挂。
+          # Theos 缺 fakeroot 时会退回自己合成的 root，一样能出 deb。
           if command -v fakeroot >/dev/null 2>&1; then
-            echo "检测到 fakeroot，移除（arm64/arm64e 不兼容）"
+            echo "移除 fakeroot（arm64/arm64e 不兼容）"
             brew uninstall --ignore-dependencies fakeroot 2>/dev/null || true
           fi
           echo "fakeroot: $(command -v fakeroot || echo none)"
@@ -81,41 +76,92 @@ jobs:
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 DEBUG=0 2>&1 | tee build.log
         continue-on-error: true
 
-      - name: Publish build log to repo (so it can be read without admin)
+      # 把包的实际结构 dump 出来，失败时能直接看到路径长什么样
+      - name: Inspect package
+        if: always()
+        run: |
+          set +e
+          : > package-info.txt
+          echo "=== ls packages ===" >> package-info.txt
+          ls -lh packages/ >> package-info.txt 2>&1
+          DEB=$(ls packages/*.deb 2>/dev/null | head -1)
+          echo "DEB=$DEB" >> package-info.txt
+          if [ -n "$DEB" ]; then
+            echo "=== dpkg-deb -I ===" >> package-info.txt
+            dpkg-deb -I "$DEB" >> package-info.txt 2>&1
+            echo "=== dpkg-deb -c ===" >> package-info.txt
+            dpkg-deb -c "$DEB" >> package-info.txt 2>&1
+          fi
+          cat package-info.txt
+
+      - name: Verify package
+        if: always()
+        id: verify
+        run: |
+          set +e
+          FAIL=0
+          DEB=$(ls packages/*.deb 2>/dev/null | head -1)
+          if [ -z "$DEB" ]; then
+            echo "::error::没有生成 deb"; exit 1
+          fi
+
+          check () {  # $1=描述 $2=命令
+            if eval "$2"; then echo "OK   $1"; else echo "::error::FAIL $1"; FAIL=1; fi
+          }
+
+          # 架构必须是 iphoneos-arm64（rootless 唯一形态）
+          check "Architecture=iphoneos-arm64" \
+                "dpkg-deb -f '$DEB' Architecture | grep -qx 'iphoneos-arm64'"
+          # 包内文件必须落在 /var/jb 前缀下
+          check "包内含 /var/jb/ 前缀" \
+                "dpkg-deb -c '$DEB' | grep -q '/var/jb/'"
+          # dylib 与 plist 必须都在 DynamicLibraries 里
+          check "含 PhigrosAuto.dylib" \
+                "dpkg-deb -c '$DEB' | grep -q 'DynamicLibraries/PhigrosAuto.dylib'"
+          check "含 PhigrosAuto.plist" \
+                "dpkg-deb -c '$DEB' | grep -q 'DynamicLibraries/PhigrosAuto.plist'"
+          # dylib 里必须同时有 arm64 与 arm64e 切片（设备是 arm64e）
+          ARCHS_HIT=$(dpkg-deb -x "$DEB" /tmp/debx 2>/dev/null && \
+                      find /tmp/debx -name 'PhigrosAuto.dylib' -exec lipo -archs {} \; 2>/dev/null)
+          echo "dylib archs: ${ARCHS_HIT:-unknown}"
+          check "dylib 含 arm64e 切片" "echo '$ARCHS_HIT' | grep -q arm64e"
+
+          exit $FAIL
+
+      # 无论成败都把日志与包信息写回仓库，便于在没有 admin 权限时排查
+      - name: Publish logs to repo
         if: always()
         run: |
           set +e
           mkdir -p ci-logs
           {
             echo "# build log $(date -u +%FT%TZ)"
+            echo
+            echo "## make package"
             echo '```'
-            tail -200 build.log 2>/dev/null || echo "no build.log"
+            tail -100 build.log 2>/dev/null || echo "no build.log"
+            echo '```'
+            echo
+            echo "## package"
+            echo '```'
+            cat package-info.txt 2>/dev/null || echo "no package-info.txt"
             echo '```'
           } > ci-logs/last-build.md
           git config user.name  "ci-bot"
           git config user.email "ci-bot@local"
           git add -f ci-logs/last-build.md
-          git commit -q -m "ci: build log $(date -u +%s)" || true
-          git push origin HEAD:main || echo "push failed (probably protected branch)"
+          git commit -q -m "ci: log $(date -u +%s)" || true
+          git pull --rebase -q origin main || true
+          git push origin HEAD:main || echo "push failed"
 
       - name: Fail if build failed
         if: steps.build.outcome != 'success'
-        run: exit 1
-
-      - name: Verify package
         run: |
-          set -e
-          ls -lh packages/
-          DEB=$(ls packages/*.deb | head -1)
-          dpkg-deb -I "$DEB"
-          # rootless 三连校验：架构、路径前缀、两个插件文件
-          dpkg-deb -I "$DEB" | grep -q 'iphoneos-arm64' || { echo "架构不对：不是 rootless"; exit 1; }
-          dpkg-deb -c "$DEB" | grep -q '/var/jb/' || { echo "包内路径缺 /var/jb 前缀：不是 rootless"; exit 1; }
-          dpkg-deb -c "$DEB" | grep -q 'DynamicLibraries/PhigrosAuto.dylib' || { echo "缺 dylib"; exit 1; }
-          dpkg-deb -c "$DEB" | grep -q 'DynamicLibraries/PhigrosAuto.plist' || { echo "缺 plist"; exit 1; }
-          echo "包结构校验通过"
+          echo "::error::make package 失败，见 ci-logs/last-build.md"
+          exit 1
 
       - name: Upload deb
+        if: steps.verify.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: PhigrosAuto-rootless
