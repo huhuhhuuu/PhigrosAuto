@@ -1,0 +1,118 @@
+#!/bin/sh
+# phprobe —— PhigrosAuto 一键诊断
+#
+# 随插件一起安装，装完直接在终端敲：
+#   phprobe
+#
+# 结论只有三种，末尾会直接告诉你属于哪一种。
+
+MARK_TMP_DIR=/var/mobile/Containers/Data/Application
+DL=/var/jb/Library/MobileSubstrate/DynamicLibraries
+
+echo "=============================================="
+echo " PhigrosAuto 诊断"
+echo "=============================================="
+
+# ---------- 1. 版本 ----------
+echo
+echo "[1] 已安装版本"
+VER="(未知)"
+for f in /var/jb/var/lib/dpkg/status /var/lib/dpkg/status; do
+  [ -f "$f" ] || continue
+  V=$(awk '/^Package: com\.yg\.phigrosauto$/{f=1} f&&/^Version:/{print $2; exit}' "$f" 2>/dev/null)
+  [ -n "$V" ] && VER="$V" && break
+done
+echo "    Version: $VER"
+echo "    dylib  : $(ls -l "$DL/PhigrosAuto.dylib" 2>/dev/null | awk '{print $5" bytes  "$6" "$7" "$8}')"
+
+# ---------- 2. 注入器 ----------
+echo
+echo "[2] 注入器文件"
+FOUND_INJ=0
+for f in /var/jb/usr/lib/libellekit.dylib \
+         /var/jb/usr/lib/libsubstrate.dylib \
+         /var/jb/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate ; do
+  if [ -f "$f" ]; then echo "    OK  $f"; FOUND_INJ=1; fi
+done
+[ "$FOUND_INJ" = "0" ] && echo "    !! 没找到注入器，ElleKit 可能没装"
+
+# ---------- 3. 原始心跳标记（最关键） ----------
+echo
+echo "[3] 心跳标记（判断 dylib 有没有真的执行）"
+MARKERS=""
+for p in "$MARK_TMP_DIR"/*/tmp/PhigrosAuto.marker ; do
+  [ -f "$p" ] && MARKERS="$MARKERS $p"
+done
+for p in /var/mobile/Media/PhigrosAuto.marker /tmp/PhigrosAuto.marker ; do
+  [ -f "$p" ] && MARKERS="$MARKERS $p"
+done
+
+if [ -n "$MARKERS" ]; then
+  echo "    找到标记:"
+  for p in $MARKERS ; do
+    echo "      $p"
+    echo "      最后一条: $(tail -1 "$p" 2>/dev/null)"
+  done
+  INJECTED=1
+else
+  echo "    没有任何心跳标记"
+  echo "    => dylib 没有进入游戏进程，或 constructor 未执行"
+  INJECTED=0
+fi
+
+# ---------- 4. 日志 ----------
+echo
+echo "[4] 日志文件"
+LOGS=""
+for p in "$MARK_TMP_DIR"/*/Documents/PhigrosAuto.log ; do
+  [ -f "$p" ] && LOGS="$LOGS $p"
+done
+for p in /var/mobile/Media/PhigrosAuto.log /var/mobile/PhigrosAuto.log /tmp/PhigrosAuto.log ; do
+  [ -f "$p" ] && LOGS="$LOGS $p"
+done
+
+if [ -n "$LOGS" ]; then
+  for p in $LOGS ; do
+    echo "    ---- $p ----"
+    cat "$p"
+    echo "    ---- end ----"
+  done
+else
+  echo "    没有日志文件"
+fi
+
+# ---------- 5. 游戏进程 ----------
+echo
+echo "[5] 游戏进程"
+if killall -0 Phigros 2>/dev/null; then
+  echo "    Phigros 正在运行"
+  GAME_UP=1
+else
+  echo "    Phigros 没在运行"
+  GAME_UP=0
+fi
+
+# ---------- 结论 ----------
+echo
+echo "=============================================="
+echo " 结论"
+echo "=============================================="
+if [ "$GAME_UP" = "0" ]; then
+  echo " 游戏没开。先打开 Phigros 停在主界面，再跑一次 phprobe。"
+elif [ "$INJECTED" = "1" ]; then
+  echo " A) dylib 已注入并执行 —— 注入链路正常。"
+  if [ -n "$LOGS" ]; then
+    echo "    日志在上面第 4 节，看最后几行判断卡在哪。"
+  else
+    echo "    但日志没写成功，说明是写文件权限问题，看心跳标记即可证明注入 OK。"
+  fi
+else
+  echo " B) dylib 没注入 —— 与面板、il2cpp 全部无关。按顺序排查："
+  echo "    1. 确认版本是 1.5.0 或更高（上面第 1 节）"
+  echo "    2. killall -9 SpringBoard  然后重新打开游戏"
+  echo "    3. 检查 filter plist："
+  echo "       cat $DL/PhigrosAuto.plist"
+  echo "    4. 如果存在 rootHide 补丁链接，说明被重定位了："
+  echo "       ls -l $DL/ | grep -i phigros"
+fi
+echo "=============================================="

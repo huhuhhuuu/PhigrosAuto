@@ -1,0 +1,7 @@
+# shell 脚本必须保持 LF，否则 iPhone 上会报
+#   sh: /var/jb/usr/bin/phprobe: bad interpreter
+# Windows 下 git 默认 autocrlf 会把 LF 改成 CRLF，这里强制锁死。
+*.sh      text eol=lf
+phprobe   text eol=lf
+tools/*   text eol=lf
+layout/usr/bin/* text eol=lf

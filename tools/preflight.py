@@ -133,6 +133,19 @@ def check_macros():
                     fail(f"{name} 用到 {used}，但 Config.h 里没有定义")
 
 
+def check_layout_scripts():
+    """layout/ 下随包安装的脚本必须存在、可执行、且是 LF 行尾。"""
+    p = ROOT / "layout" / "usr" / "bin" / "phprobe"
+    if not p.exists():
+        fail("layout/usr/bin/phprobe 缺失（诊断脚本要随包安装）")
+        return
+    data = p.read_bytes()
+    if b"\r\n" in data:
+        fail("layout/usr/bin/phprobe 含 CRLF 行尾，iPhone 上会报 bad interpreter")
+    if not data.startswith(b"#!"):
+        fail("layout/usr/bin/phprobe 缺 shebang")
+
+
 def main():
     check_required_files()
     check_plist()
@@ -140,6 +153,7 @@ def main():
     check_header_impl()
     check_braces()
     check_macros()
+    check_layout_scripts()
 
     if FAILS:
         print("静态自检失败：")

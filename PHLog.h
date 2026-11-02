@@ -20,6 +20,11 @@ void PHLogInit(void);
 void PHLogWrite(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
 const char *PHLogCurrentPath(void);   // 实际生效的日志路径（沙盒内外不同）
 
+// 心跳标记：证明 dylib 被执行过。放在 App 容器 tmp/ 下，几乎不会失败。
+// 只要 /var/mobile/Containers/Data/Application/*/tmp/PhigrosAuto.marker
+// 存在，就说明注入成功，与面板/il2cpp 无关。
+void PHWriteHeartbeat(const char *tag);
+
 // 日志会按可写性依次尝试以下位置，第一个能打开的生效：
 //   1) 自身沙盒 Documents/PhigrosAuto.log
 //   2) /var/mobile/Media/PhigrosAuto.log

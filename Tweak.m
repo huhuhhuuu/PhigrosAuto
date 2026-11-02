@@ -418,7 +418,12 @@ static void PHBootstrap(void) {
 
 __attribute__((constructor))
 static void PHInit(void) {
+    // 第一件事：写心跳。不用日志框架，不依赖任何 UI/il2cpp 状态。
+    // 这个文件一旦出现，就证明注入成功，后面所有排查都不必再怀疑注入。
+    PHWriteHeartbeat("constructor");
+
     PHLogInit();
+    PHWriteHeartbeat("log-init");
     PHLogWrite(@"==== dylib 已注入 (pid %d) ====", (int)getpid());
     PHLogWrite(@"日志实际写入: %s", PHLogCurrentPath());
 

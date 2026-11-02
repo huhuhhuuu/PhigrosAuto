@@ -7,6 +7,7 @@
 #import <string.h>
 #import <sys/stat.h>
 #import <limits.h>
+#import <fcntl.h>
 
 static pthread_mutex_t gLogLock = PTHREAD_MUTEX_INITIALIZER;
 static FILE           *gLogFP = NULL;
@@ -128,4 +129,54 @@ void PHLogWrite(NSString *fmt, ...) {
     pthread_mutex_unlock(&gLogLock);
 
     NSLog(@"[PhigrosAuto] %@", msg);
+}
+
+// ============================================================
+// 心跳标记 —— 证明"dylib 到底有没有被执行"
+//
+// 日志会受沙盒写权限影响，但"进程里跑过一段代码"这件事必须有
+// 一个几乎不可能失败的证据。这里用最原始的系统调用直接写：
+//   · 不经过 PHLog，不依赖任何 UI / il2cpp 状态
+//   · 目标放在自身容器 tmp/（每个 App 必然可写）
+//   · 用 open/write/close，失败也不影响主流程
+//
+// 只要这个文件出现，就说明注入成功、constructor 跑了，
+// 之后所有"看不到面板/没有日志"的问题都能排除注入这一层。
+// ============================================================
+
+void PHWriteHeartbeat(const char *tag) {
+    char path[PATH_MAX];
+
+    // 1) 自身容器 tmp —— 一定有权限
+    NSString *tmp = NSTemporaryDirectory();
+    if (tmp.length) {
+        snprintf(path, sizeof(path), "%sPhigrosAuto.marker", tmp.UTF8String);
+        int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd >= 0) {
+            char buf[256];
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            struct tm tmv;
+            time_t sec = tv.tv_sec;
+            localtime_r(&sec, &tmv);
+            int n = snprintf(buf, sizeof(buf),
+                             "%02d:%02d:%02d.%03d pid=%d %s\n",
+                             tmv.tm_hour, tmv.tm_min, tmv.tm_sec,
+                             (int)(tv.tv_usec / 1000), (int)getpid(),
+                             tag ? tag : "");
+            if (n > 0) write(fd, buf, (size_t)n);
+            close(fd);
+            return;
+        }
+    }
+
+    // 2) 兜底：media 分区
+    int fd = open("/var/mobile/Media/PhigrosAuto.marker",
+                  O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) {
+        char buf[256];
+        int n = snprintf(buf, sizeof(buf), "pid=%d %s\n", (int)getpid(), tag ? tag : "");
+        if (n > 0) write(fd, buf, (size_t)n);
+        close(fd);
+    }
 }
