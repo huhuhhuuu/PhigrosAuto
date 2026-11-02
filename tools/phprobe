@@ -8,6 +8,9 @@
 
 MARK_TMP_DIR=/var/mobile/Containers/Data/Application
 DL=/var/jb/Library/MobileSubstrate/DynamicLibraries
+BID_MISMATCH=0
+BID=""
+PLIST_BID=""
 
 echo "=============================================="
 echo " PhigrosAuto 诊断"
@@ -92,6 +95,38 @@ else
   GAME_UP=0
 fi
 
+# ---------- 5b. 真实 bundle id（关键） ----------
+echo
+echo "[5b] 游戏真实 bundle id（对照 plist 的 Filter）"
+APPBIN=""
+for p in /var/containers/Bundle/Application/*/Phigros.app/Phigros \
+         /private/var/containers/Bundle/Application/*/Phigros.app/Phigros ; do
+  [ -f "$p" ] && APPBIN="$p"
+done
+
+if [ -n "$APPBIN" ]; then
+  APP_DIR=$(dirname "$APPBIN")
+  echo "    路径: $APP_DIR"
+  # Info.plist 可能是二进制格式，优先 plutil，没有就 strings 兜底
+  if command -v plutil >/dev/null 2>&1; then
+    BID=$(plutil -extract CFBundleIdentifier raw "$APP_DIR/Info.plist" 2>/dev/null)
+  fi
+  if [ -z "$BID" ]; then
+    BID=$(strings "$APP_DIR/Info.plist" 2>/dev/null | grep -E '^[a-zA-Z0-9]+\.[a-zA-Z0-9.-]+$' | head -1)
+  fi
+  [ -z "$BID" ] && BID=$(grep -a -o 'com\.[A-Za-z0-9._-]*' "$APP_DIR/Info.plist" 2>/dev/null | head -1)
+  echo "    CFBundleIdentifier = ${BID:-(读不出)}"
+
+  PLIST_BID=$(grep -o '"[^"]*\.[^"]*"' "$DL/PhigrosAuto.plist" 2>/dev/null | tr -d '"' | head -1)
+  echo "    plist 里写的      = ${PLIST_BID:-(空)}"
+  if [ -n "$BID" ] && [ -n "$PLIST_BID" ] && [ "$BID" != "$PLIST_BID" ]; then
+    echo "    !!! 不匹配 —— 这就是没注入的直接原因 !!!"
+    BID_MISMATCH=1
+  fi
+else
+  echo "    找不到 Phigros.app，无法读取 bundle id"
+fi
+
 # ---------- 结论 ----------
 echo
 echo "=============================================="
@@ -107,12 +142,20 @@ elif [ "$INJECTED" = "1" ]; then
     echo "    但日志没写成功，说明是写文件权限问题，看心跳标记即可证明注入 OK。"
   fi
 else
-  echo " B) dylib 没注入 —— 与面板、il2cpp 全部无关。按顺序排查："
-  echo "    1. 确认版本是 1.5.0 或更高（上面第 1 节）"
-  echo "    2. killall -9 SpringBoard  然后重新打开游戏"
-  echo "    3. 检查 filter plist："
-  echo "       cat $DL/PhigrosAuto.plist"
-  echo "    4. 如果存在 rootHide 补丁链接，说明被重定位了："
-  echo "       ls -l $DL/ | grep -i phigros"
+  echo " B) dylib 没注入。真正的可疑点按可能性排序："
+  echo
+  if [ "$BID_MISMATCH" = "1" ]; then
+    echo "   ★ 第一位：bundle id 不匹配（见 5b 节）"
+    echo "     plist 写的是 $PLIST_BID，游戏实际是 $BID"
+    echo "     => 把 plist 改成实际值，或告诉我实际值，我重新打包。"
+  fi
+  echo "   1. filter plist 内容："
+  echo "      cat $DL/PhigrosAuto.plist"
+  echo "   2. rootHide 补丁链接（被重定位就没法常规注入）："
+  echo "      ls -l $DL/ | grep -i phigros"
+  echo "   3. 桌面未重启（注入只发生在进程启动瞬间）："
+  echo "      killall -9 SpringBoard"
+  echo "   4. 装完后游戏是从后台恢复而不是冷启动："
+  echo "      从多任务里彻底划掉 Phigros，再重新打开"
 fi
 echo "=============================================="
