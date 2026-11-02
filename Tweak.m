@@ -138,16 +138,23 @@ static UIWindow *PHFindHostWindow(void) {
         }
     }
 
-    // 2) 退回 app.windows 里层级最高的可见 window
+    // 2) 退回各 scene 的 windows 里层级最高的可见 window
+    //    注意不能直接用 UIApplication 上的 windows 属性：iOS 15 起它被
+    //    标记 deprecated，而工程开了 -Werror，deprecated 直接算编译失败。
     UIWindow *best = nil;
-    for (UIWindow *w in app.windows) {
+    NSMutableArray<UIWindow *> *all = [NSMutableArray array];
+    for (UIScene *sc in app.connectedScenes) {
+        if (![sc isKindOfClass:[UIWindowScene class]]) continue;
+        [all addObjectsFromArray:((UIWindowScene *)sc).windows];
+    }
+    for (UIWindow *w in all) {
         if (w.hidden || w.alpha < 0.01) continue;
         if (!best || w.windowLevel >= best.windowLevel) best = w;
     }
     if (best) return best;
 
     // 3) 兜底：任何 window 都行
-    return app.windows.firstObject;
+    return all.firstObject;
 }
 
 - (BOOL)attachSceneIfNeeded {
@@ -183,7 +190,7 @@ static UIWindow *PHFindHostWindow(void) {
     self.btn.hidden = NO;
     [self refresh];
 
-    PHLogWrite(@"panel 已挂到 keyWindow (level=%.0f, %dx%.0f)",
+    PHLogWrite(@"panel 已挂到 keyWindow (level=%.0f, %gx%g)",
               host.windowLevel, host.bounds.size.width, host.bounds.size.height);
 }
 
