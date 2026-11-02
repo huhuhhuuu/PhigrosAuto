@@ -1,0 +1,91 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  # ------------------------------------------------------------
+  # 第一步：在便宜的 Linux 机器上做静态检查，抓语法/明显错误，
+  # 省掉 macOS 分钟数。这一步红了就不用看后面。
+  # ------------------------------------------------------------
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight (preflight.py)
+        run: python3 tools/preflight.py
+
+  # ------------------------------------------------------------
+  # 第二步：macOS 上真正编译，出 rootless deb
+  # ------------------------------------------------------------
+  deb:
+    needs: lint
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Theos
+        uses: actions/cache@v4
+        with:
+          path: ~/theos
+          key: theos-macos-v2
+
+      - name: Install toolchain
+        run: |
+          set -euo pipefail
+          brew install ldid xz || true
+          if [ ! -d "$HOME/theos" ]; then
+            git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
+          fi
+          # iOS SDK：Theos 不自带，单独拉
+          if [ -z "$(ls -A "$HOME/theos/sdks" 2>/dev/null || true)" ]; then
+            mkdir -p "$HOME/theos/sdks"
+            curl -L --retry 3 -o /tmp/sdks.zip https://github.com/theos/sdks/archive/master.zip
+            unzip -q /tmp/sdks.zip -d /tmp/sdks
+            mv /tmp/sdks/sdks-master/*.sdk "$HOME/theos/sdks/"
+          fi
+          ls "$HOME/theos/sdks"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/theos/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Ensure dpkg-deb available
+        run: |
+          set -e
+          if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
+          dpkg-deb --version | head -1
+
+      - name: Build rootless
+        run: |
+          set -o pipefail
+          make clean || true
+          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 DEBUG=0 2>&1 | tee build.log
+
+      - name: Verify package
+        run: |
+          set -e
+          ls -lh packages/
+          DEB=$(ls packages/*.deb | head -1)
+          dpkg-deb -I "$DEB"
+          # rootless 三连校验：架构、路径前缀、两个插件文件
+          dpkg-deb -I "$DEB" | grep -q 'iphoneos-arm64' || { echo "架构不对：不是 rootless"; exit 1; }
+          dpkg-deb -c "$DEB" | grep -q '/var/jb/' || { echo "包内路径缺 /var/jb 前缀：不是 rootless"; exit 1; }
+          dpkg-deb -c "$DEB" | grep -q 'DynamicLibraries/PhigrosAuto.dylib' || { echo "缺 dylib"; exit 1; }
+          dpkg-deb -c "$DEB" | grep -q 'DynamicLibraries/PhigrosAuto.plist' || { echo "缺 plist"; exit 1; }
+          echo "包结构校验通过"
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhigrosAuto-rootless
+          path: packages/*.deb
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore

@@ -1,0 +1,16 @@
+# Theos 编译产物
+.theos/
+packages/
+obj/
+
+# 本地构建日志
+build.log
+
+# Frida 侦察脚本编译产物
+_discover.js
+node_modules/
+
+# Windows / macOS 杂物
+.DS_Store
+Thumbs.db
+*.swp
