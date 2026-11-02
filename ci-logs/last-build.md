@@ -1,4 +1,4 @@
-# build log 2026-11-02T15:19:47Z
+# build log 2026-11-02T15:23:18Z
 
 ## make package
 ```
@@ -32,11 +32,11 @@ dm.pl: building package `com.yg.phigrosauto:iphoneos-arm64' in `./packages/com.y
 ```
 === ls packages ===
 total 32
--rw-r--r--  1 runner  staff    15K Nov  2 15:19 com.yg.phigrosauto_1.0.0_iphoneos-arm64.deb
+-rw-r--r--  1 runner  staff    15K Nov  2 15:23 com.yg.phigrosauto_1.0.0_iphoneos-arm64.deb
 DEB=packages/com.yg.phigrosauto_1.0.0_iphoneos-arm64.deb
 === dpkg-deb -I ===
  new Debian package, version 2.0.
- size 15822 bytes: control archive=349 bytes.
+ size 15824 bytes: control archive=349 bytes.
      255 bytes,    10 lines      control
  Package: com.yg.phigrosauto
  Name: PhigrosAuto
@@ -49,12 +49,12 @@ DEB=packages/com.yg.phigrosauto_1.0.0_iphoneos-arm64.deb
  Version: 1.0.0
  Installed-Size: 204
 === dpkg-deb -c ===
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 .
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 var
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 var/jb
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 var/jb/Library
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 var/jb/Library/MobileSubstrate
-drwxr-xr-x root/wheel        0 2026-11-02 15:19 var/jb/Library/MobileSubstrate/DynamicLibraries
--rwxr-xr-x root/wheel   204496 2026-11-02 15:19 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
--rw-r--r-- root/wheel       95 2026-11-02 15:19 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 .
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 var
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 var/jb
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 var/jb/Library
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 var/jb/Library/MobileSubstrate
+drwxr-xr-x root/wheel        0 2026-11-02 15:23 var/jb/Library/MobileSubstrate/DynamicLibraries
+-rwxr-xr-x root/wheel   204496 2026-11-02 15:23 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r-- root/wheel       95 2026-11-02 15:23 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
 ```
