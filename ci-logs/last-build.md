@@ -1,40 +1,78 @@
-# build log 2026-11-02T16:42:49Z
+# build log 2026-11-02T16:46:22Z
 
 ## make package
 ```
 [0;36m==> [1;36mNotice:[m Build may be slow as Theos isn’t using all available CPU cores on this computer. Consider upgrading GNU Make: https://theos.dev/docs/parallel-building
 [1;31m> [1;3;39mMaking all for tweak PhigrosAuto…[m
 [0;32m==> [1;39mCompiling Tweak.m (arm64)…[m
-[1mTweak.m:187:33: [0m[0;1;31merror: [0m[1mformat specifies type 'int' but the argument has type 'CGFloat' (aka 'double') [-Werror,-Wformat][0m
-              host.windowLevel, host.bounds.size.width, host.bounds.size.height);
-[0;1;32m                                ^~~~~~~~~~~~~~~~~~~~~~
-[0m[1mTweak.m:143:29: [0m[0;1;31merror: [0m[1m'windows' is deprecated: first deprecated in iOS 15.0 - Use UIWindowScene.windows on a relevant window scene instead [-Werror,-Wdeprecated-declarations][0m
-    for (UIWindow *w in app.windows) {
-[0;1;32m                            ^
-[0m[1m/Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS17.5.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h:109:62: [0m[0;1;30mnote: [0m'windows' has been explicitly marked deprecated here[0m
-@property(nonatomic,readonly) NSArray<__kindof UIWindow *>  *windows API_DEPRECATED("Use UIWindowScene.windows on a relevant window scene instead", ios(2.0, 15.0), visionos(1.0, 1.0));
-[0;1;32m                                                             ^
-[0m[1mTweak.m:150:16: [0m[0;1;31merror: [0m[1m'windows' is deprecated: first deprecated in iOS 15.0 - Use UIWindowScene.windows on a relevant window scene instead [-Werror,-Wdeprecated-declarations][0m
-    return app.windows.firstObject;
-[0;1;32m               ^
-[0m[1m/Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS17.5.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h:109:62: [0m[0;1;30mnote: [0m'windows' has been explicitly marked deprecated here[0m
-@property(nonatomic,readonly) NSArray<__kindof UIWindow *>  *windows API_DEPRECATED("Use UIWindowScene.windows on a relevant window scene instead", ios(2.0, 15.0), visionos(1.0, 1.0));
-[0;1;32m                                                             ^
-[0m3 errors generated.
-make[3]: *** [/Users/runner/work/PhigrosAuto/PhigrosAuto/.theos/obj/arm64/Tweak.m.4173dfc0.o] Error 1
-make[2]: *** [/Users/runner/work/PhigrosAuto/PhigrosAuto/.theos/obj/arm64/PhigrosAuto.dylib] Error 2
-make[1]: *** [internal-library-all_] Error 2
-make: *** [PhigrosAuto.all.tweak.variables] Error 2
+[0;32m==> [1;39mCompiling IL2CPP.m (arm64)…[m
+[0;32m==> [1;39mCompiling IOHIDTouch.m (arm64)…[m
+[0;32m==> [1;39mCompiling NoteModel.m (arm64)…[m
+[0;32m==> [1;39mCompiling Autoplay.m (arm64)…[m
+[0;32m==> [1;39mCompiling PHLog.m (arm64)…[m
+[0;33m==> [1;39mLinking tweak PhigrosAuto (arm64)…[m
+ld: warning: -multiply_defined is obsolete
+[0;34m==> [1;39mGenerating debug symbols for PhigrosAuto…[m
+[0;34m==> [1;39mStripping PhigrosAuto (arm64)…[m
+[0;32m==> [1;39mCompiling Tweak.m (arm64e)…[m
+[0;32m==> [1;39mCompiling IL2CPP.m (arm64e)…[m
+[0;32m==> [1;39mCompiling IOHIDTouch.m (arm64e)…[m
+[0;32m==> [1;39mCompiling NoteModel.m (arm64e)…[m
+[0;32m==> [1;39mCompiling Autoplay.m (arm64e)…[m
+[0;32m==> [1;39mCompiling PHLog.m (arm64e)…[m
+[0;33m==> [1;39mLinking tweak PhigrosAuto (arm64e)…[m
+ld: warning: -multiply_defined is obsolete
+[0;34m==> [1;39mGenerating debug symbols for PhigrosAuto…[m
+[0;34m==> [1;39mStripping PhigrosAuto (arm64e)…[m
+[0;34m==> [1;39mMerging tweak PhigrosAuto…[m
+[0;34m==> [1;39mSigning PhigrosAuto…[m
+[1;31m> [1;3;39mMaking stage for tweak PhigrosAuto…[m
+dm.pl: building package `com.yg.phigrosauto:iphoneos-arm64' in `./packages/com.yg.phigrosauto_1.3.0_iphoneos-arm64.deb'
 ```
 
 ## package
 ```
 === ls packages ===
-ls: packages/: No such file or directory
-DEB=
+total 40
+-rw-r--r--  1 runner  staff    20K Nov  2 16:46 com.yg.phigrosauto_1.3.0_iphoneos-arm64.deb
+DEB=packages/com.yg.phigrosauto_1.3.0_iphoneos-arm64.deb
+=== dpkg-deb -I ===
+ new Debian package, version 2.0.
+ size 20396 bytes: control archive=350 bytes.
+     255 bytes,    10 lines      control
+ Package: com.yg.phigrosauto
+ Name: PhigrosAuto
+ Description: Phigros 全自动打歌 — 代打 / 自动判定 / 完美连击
+ Maintainer: YG
+ Author: YG
+ Section: Tweaks
+ Depends: mobilesubstrate
+ Architecture: iphoneos-arm64
+ Version: 1.3.0
+ Installed-Size: 208
+=== dpkg-deb -c ===
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 .
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 var
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 var/jb
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 var/jb/Library
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 var/jb/Library/MobileSubstrate
+drwxr-xr-x root/wheel        0 2026-11-02 16:46 var/jb/Library/MobileSubstrate/DynamicLibraries
+-rwxr-xr-x root/wheel   206240 2026-11-02 16:46 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r-- root/wheel       95 2026-11-02 16:46 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
 ```
 
 ## verify
 ```
-no verify.log
+Architecture: iphoneos-arm64
+OK   Architecture=iphoneos-arm64
+WARN 包内含 /var/jb/ 前缀
+OK   含 PhigrosAuto.dylib
+OK   含 PhigrosAuto.plist
+extract rc=0
+-rwxr-xr-x  1 runner  wheel  206240 Nov  2 16:46 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r--  1 runner  wheel  95 Nov  2 16:46 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+dylib archs: arm64 arm64e
+OK   dylib 含 arm64e 切片
+OK   control 无重复字段
+--- verify result: FAIL=1 ---
 ```
