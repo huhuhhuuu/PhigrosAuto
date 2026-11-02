@@ -72,6 +72,11 @@ jobs:
         id: build
         run: |
           set -o pipefail
+          # 显式指定签名器：iOS 15+ 的 dyld 对 arm64e 切片要求 dylib
+          # 必须带有效 LC_CODE_SIGNATURE，否则静默拒绝加载。
+          # 表现就是"文件都在、版本对、但 constructor 一行都不执行"。
+          export THEOS_SIGNING=ldid
+          echo "ldid: $(command -v ldid || echo MISSING)"
           make clean || true
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 DEBUG=0 2>&1 | tee build.log
         continue-on-error: true
@@ -129,6 +134,26 @@ jobs:
           ARCHS_HIT=$(find /tmp/debx -name 'PhigrosAuto.dylib' -exec lipo -archs {} \; 2>&1)
           echo "dylib archs: ${ARCHS_HIT:-unknown}"
           check "dylib 含 arm64e 切片" "echo '$ARCHS_HIT' | grep -q arm64e"
+
+          # 签名段检查：iOS 15+ dyld 拒绝加载无有效 LC_CODE_SIGNATURE 的 dylib，
+          # 失败时表现为"插件文件都在但 constructor 不执行"。
+          DY=$(find /tmp/debx -name 'PhigrosAuto.dylib' | head -1)
+          if [ -n "$DY" ]; then
+            if otool -l "$DY" 2>/dev/null | grep -q LC_CODE_SIGNATURE; then
+              echo "OK   dylib 含 LC_CODE_SIGNATURE"
+            else
+              echo "::error::dylib 缺 LC_CODE_SIGNATURE，iOS 15+ 会拒绝加载"
+              FAIL=1
+            fi
+            # 每个切片都要有签名
+            for a in arm64 arm64e; do
+              if otool -arch "$a" -l "$DY" 2>/dev/null | grep -q LC_CODE_SIGNATURE; then
+                echo "OK   $a 切片已签名"
+              else
+                echo "WARN $a 切片可能未签名"
+              fi
+            done
+          fi
           # 防止 control 里字段重复导致设备上 dpkg 拒绝解析整包
           dpkg-deb -f "$DEB" > /tmp/ctrl.txt 2>&1
           DUP=$(sed -n 's/^\([A-Za-z][A-Za-z0-9-]*\):.*/\1/p' /tmp/ctrl.txt \
