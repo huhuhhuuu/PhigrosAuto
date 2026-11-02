@@ -1,4 +1,4 @@
-# build log 2026-11-02T16:01:09Z
+# build log 2026-11-02T16:04:11Z
 
 ## make package
 ```
@@ -34,11 +34,11 @@ dm.pl: building package `com.yg.phigrosauto:iphoneos-arm64' in `./packages/com.y
 ```
 === ls packages ===
 total 40
--rw-r--r--  1 runner  staff    17K Nov  2 16:01 com.yg.phigrosauto_1.1.0_iphoneos-arm64.deb
+-rw-r--r--  1 runner  staff    17K Nov  2 16:04 com.yg.phigrosauto_1.1.0_iphoneos-arm64.deb
 DEB=packages/com.yg.phigrosauto_1.1.0_iphoneos-arm64.deb
 === dpkg-deb -I ===
  new Debian package, version 2.0.
- size 17712 bytes: control archive=354 bytes.
+ size 17682 bytes: control archive=354 bytes.
      275 bytes,    11 lines      control
  Package: com.yg.phigrosauto
  Name: PhigrosAuto
@@ -52,27 +52,27 @@ DEB=packages/com.yg.phigrosauto_1.1.0_iphoneos-arm64.deb
  Version: 1.1.0
  Installed-Size: 208
 === dpkg-deb -c ===
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 .
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 var
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 var/jb
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 var/jb/Library
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 var/jb/Library/MobileSubstrate
-drwxr-xr-x root/wheel        0 2026-11-02 16:01 var/jb/Library/MobileSubstrate/DynamicLibraries
--rwxr-xr-x root/wheel   205376 2026-11-02 16:01 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
--rw-r--r-- root/wheel       95 2026-11-02 16:01 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 .
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 var
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 var/jb
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 var/jb/Library
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 var/jb/Library/MobileSubstrate
+drwxr-xr-x root/wheel        0 2026-11-02 16:04 var/jb/Library/MobileSubstrate/DynamicLibraries
+-rwxr-xr-x root/wheel   205376 2026-11-02 16:04 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r-- root/wheel       95 2026-11-02 16:04 var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
 ```
 
 ## verify
 ```
-Architecture: dpkg-deb: error: parsing file '/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T//dpkg-deb.78eSqj/control' near line 11 package 'com.yg.phigrosauto:iphoneos-arm64':
+Architecture: dpkg-deb: error: parsing file '/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T//dpkg-deb.MEAxIE/control' near line 11 package 'com.yg.phigrosauto:iphoneos-arm64':
  duplicate value for 'Installed-Size' field
 WARN Architecture=iphoneos-arm64
 WARN 包内含 /var/jb/ 前缀
 OK   含 PhigrosAuto.dylib
 OK   含 PhigrosAuto.plist
 extract rc=0
--rwxr-xr-x  1 runner  wheel  205376 Nov  2 16:01 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
--rw-r--r--  1 runner  wheel  95 Nov  2 16:01 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
+-rwxr-xr-x  1 runner  wheel  205376 Nov  2 16:04 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.dylib
+-rw-r--r--  1 runner  wheel  95 Nov  2 16:04 /tmp/debx/var/jb/Library/MobileSubstrate/DynamicLibraries/PhigrosAuto.plist
 dylib archs: arm64 arm64e
 OK   dylib 含 arm64e 切片
 --- verify result: FAIL=1 ---
