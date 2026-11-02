@@ -1,16 +1,22 @@
 #!/bin/sh
 # phprobe —— PhigrosAuto 一键诊断
 #
-# 随插件一起安装，装完直接在终端敲：
-#   phprobe
+# 随插件安装，终端直接敲：phprobe
 #
-# 结论只有三种，末尾会直接告诉你属于哪一种。
+# 说明：所有读 plist 的地方都用 `tr '\0' '\n'` 先转换，
+# 因为设备上的 Info.plist 和 filter plist 是二进制格式，
+# 字符串以 NUL 分隔、没有换行，直接 grep 会读到无关内容
+# （之前就因此误报过 bundle id 不匹配）。
 
-MARK_TMP_DIR=/var/mobile/Containers/Data/Application
+MARK_DIRS="/var/mobile/Containers/Data/Application"
 DL=/var/jb/Library/MobileSubstrate/DynamicLibraries
 BID_MISMATCH=0
 BID=""
 PLIST_BID=""
+INJECTED=0
+GAME_UP=0
+LOGS=""
+MARKERS=""
 
 echo "=============================================="
 echo " PhigrosAuto 诊断"
@@ -23,108 +29,182 @@ VER="(未知)"
 for f in /var/jb/var/lib/dpkg/status /var/lib/dpkg/status; do
   [ -f "$f" ] || continue
   V=$(awk '/^Package: com\.yg\.phigrosauto$/{f=1} f&&/^Version:/{print $2; exit}' "$f" 2>/dev/null)
-  [ -n "$V" ] && VER="$V" && break
+  if [ -n "$V" ]; then VER="$V"; break; fi
 done
 echo "    Version: $VER"
 echo "    dylib  : $(ls -l "$DL/PhigrosAuto.dylib" 2>/dev/null | awk '{print $5" bytes  "$6" "$7" "$8}')"
 
-# ---------- 2. 注入器 ----------
+# ---------- 2. dylib 架构 ----------
 echo
-echo "[2] 注入器文件"
+echo "[2] dylib 架构（iPhone 15 Pro 是 arm64e）"
+if [ -f "$DL/PhigrosAuto.dylib" ]; then
+  MAGIC=$(od -An -tx1 -N4 "$DL/PhigrosAuto.dylib" 2>/dev/null | tr -d ' \n')
+  case "$MAGIC" in
+    cafebabe) echo "    FAT（多架构合一）" ;;
+    cffaedfe) echo "    单薄 Mach-O 64 位（arm64 或 arm64e）" ;;
+    cefaedfe) echo "    单薄 Mach-O 32 位" ;;
+    *)        echo "    未知 magic: $MAGIC" ;;
+  esac
+else
+  echo "    dylib 不存在"
+fi
+
+# ---------- 3. 注入器 ----------
+echo
+echo "[3] 注入器文件"
 FOUND_INJ=0
 for f in /var/jb/usr/lib/libellekit.dylib \
          /var/jb/usr/lib/libsubstrate.dylib \
          /var/jb/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate ; do
   if [ -f "$f" ]; then echo "    OK  $f"; FOUND_INJ=1; fi
 done
-[ "$FOUND_INJ" = "0" ] && echo "    !! 没找到注入器，ElleKit 可能没装"
+[ "$FOUND_INJ" = "0" ] && echo "    !! 没找到注入器"
 
-# ---------- 3. 原始心跳标记（最关键） ----------
+# ---------- 4. RootHide 隐藏名单 ----------
 echo
-echo "[3] 心跳标记（判断 dylib 有没有真的执行）"
-MARKERS=""
-for p in "$MARK_TMP_DIR"/*/tmp/PhigrosAuto.marker ; do
-  [ -f "$p" ] && MARKERS="$MARKERS $p"
+echo "[4] RootHide 隐藏名单（命中即被主动抑制注入）"
+RH_HITS=""
+# RootHide 的偏好与名单散落在几处，逐个扫
+for p in /var/mobile/Library/Preferences/com.roothide*.plist \
+         /var/mobile/Library/Preferences/*.roothide*.plist \
+         /var/jb/var/mobile/Library/Preferences/com.roothide*.plist \
+         /var/jb/Library/RootHide/*.plist \
+         /var/mobile/Library/RootHide/*.plist ; do
+  [ -f "$p" ] || continue
+  HIT=$(tr '\0' '\n' < "$p" 2>/dev/null | grep -i -c 'phigros')
+  if [ "${HIT:-0}" -gt 0 ]; then
+    echo "    !! $p   出现 Phigros $HIT 次"
+    RH_HITS="$RH_HITS $p"
+  fi
 done
-for p in /var/mobile/Media/PhigrosAuto.marker /tmp/PhigrosAuto.marker ; do
-  [ -f "$p" ] && MARKERS="$MARKERS $p"
-done
+# 兜底：在偏好目录里按内容找，文件名不一定带 roothide
+if [ -z "$RH_HITS" ]; then
+  RH_HITS=$(grep -rli 'phigros' /var/mobile/Library/Preferences/ 2>/dev/null | head -5)
+  if [ -n "$RH_HITS" ]; then
+    echo "    含 Phigros 字样的偏好文件:"
+    for p in $RH_HITS; do echo "      $p"; done
+  fi
+fi
+[ -z "$RH_HITS" ] && echo "    没发现包含 Phigros 的 RootHide 配置"
+ls -d /var/jb/Library/RootHide 2>/dev/null >/dev/null && echo "    /var/jb/Library/RootHide 存在"
 
+# ---------- 4b. dylib 依赖库（dyld 加载失败会导致 constructor 完全不执行） ----------
+echo
+echo "[4b] dylib 依赖的库/框架（全部必须存在）"
+if [ -f "$DL/PhigrosAuto.dylib" ]; then
+  DEPS=$(strings "$DL/PhigrosAuto.dylib" 2>/dev/null \
+         | grep -E '^/(usr/lib|System/Library|var/jb)/[A-Za-z0-9._/-]+$' | sort -u)
+  if [ -n "$DEPS" ]; then
+    for d in $DEPS; do
+      REAL="$d"
+      case "$d" in
+        /usr/lib/*|/System/*) REAL="$d" ;;
+      esac
+      if [ -e "$REAL" ] || [ -e "/var/jb$d" ]; then
+        echo "    OK  $d"
+      else
+        echo "    !! 缺失 $d"
+      fi
+    done
+  else
+    echo "    未提取到依赖（可能已静态链接，正常）"
+  fi
+fi
+
+# ---------- 5. DynamicLibraries 目录实况 ----------
+echo
+echo "[5] $DL 实况"
+ls -l "$DL" 2>/dev/null | grep -i phigros
+
+# ---------- 6. filter plist 原文 ----------
+echo
+echo "[6] filter plist 实际内容（二进制已转换）"
+if [ -f "$DL/PhigrosAuto.plist" ]; then
+  tr '\0' '\n' < "$DL/PhigrosAuto.plist" 2>/dev/null | grep -v '^$'
+  PLIST_BID=$(tr '\0' '\n' < "$DL/PhigrosAuto.plist" 2>/dev/null \
+              | grep -o 'com\.[A-Za-z0-9._-]*' | head -1)
+  echo "    解析出的 Bundle = ${PLIST_BID:-(未取到)}"
+else
+  echo "    plist 不存在"
+fi
+# 是否被禁用
+if [ -f "$DL/PhigrosAuto.plist.disabled" ] || [ -f "$DL/PhigrosAuto.dylib.disabled" ]; then
+  echo "    !! 发现 .disabled 标记，插件被禁用了"
+fi
+
+# ---------- 7. 游戏真实 bundle id ----------
+echo
+echo "[7] 游戏真实 bundle id"
+APPBIN=""
+for p in /var/containers/Bundle/Application/*/Phigros.app/Phigros \
+         /private/var/containers/Bundle/Application/*/Phigros.app/Phigros ; do
+  [ -f "$p" ] && APPBIN="$p"
+done
+if [ -n "$APPBIN" ]; then
+  APP_DIR=$(dirname "$APPBIN")
+  echo "    路径: $APP_DIR"
+  # 二进制 plist 没有换行，先 tr 转换成行，再取键的下一行
+  BID=$(tr '\0' '\n' < "$APP_DIR/Info.plist" 2>/dev/null \
+        | grep -A1 '^CFBundleIdentifier$' | tail -1)
+  [ -z "$BID" ] && BID=$(tr '\0' '\n' < "$APP_DIR/Info.plist" 2>/dev/null \
+        | grep -o 'com\.[A-Za-z0-9._-]*' | grep -v apple | head -1)
+  echo "    CFBundleIdentifier = ${BID:-(读不出)}"
+  if [ -n "$BID" ] && [ -n "$PLIST_BID" ] && [ "$BID" != "$PLIST_BID" ]; then
+    echo "    !!! 不匹配：plist=$PLIST_BID 实际=$BID"
+    BID_MISMATCH=1
+  elif [ -n "$BID" ] && [ -n "$PLIST_BID" ]; then
+    echo "    匹配 OK"
+  fi
+else
+  echo "    找不到 Phigros.app"
+fi
+
+# ---------- 8. 心跳标记 ----------
+echo
+echo "[8] 心跳标记（判断 dylib 有没有真的执行）"
+for p in "$MARK_DIRS"/*/tmp/PhigrosAuto.marker; do
+  [ -f "$p" ] && MARKERS="$MARKERS $p"
+done
+for p in /var/mobile/Media/PhigrosAuto.marker /tmp/PhigrosAuto.marker; do
+  [ -f "$p" ] && MARKERS="$MARKERS $p"
+done
 if [ -n "$MARKERS" ]; then
-  echo "    找到标记:"
-  for p in $MARKERS ; do
-    echo "      $p"
-    echo "      最后一条: $(tail -1 "$p" 2>/dev/null)"
+  for p in $MARKERS; do
+    echo "    $p"
+    echo "      $(tail -1 "$p" 2>/dev/null)"
   done
   INJECTED=1
 else
-  echo "    没有任何心跳标记"
-  echo "    => dylib 没有进入游戏进程，或 constructor 未执行"
-  INJECTED=0
+  echo "    没有心跳标记 => dylib 未进入游戏进程"
 fi
 
-# ---------- 4. 日志 ----------
+# ---------- 9. 日志 ----------
 echo
-echo "[4] 日志文件"
-LOGS=""
-for p in "$MARK_TMP_DIR"/*/Documents/PhigrosAuto.log ; do
+echo "[9] 日志文件"
+for p in "$MARK_DIRS"/*/Documents/PhigrosAuto.log; do
   [ -f "$p" ] && LOGS="$LOGS $p"
 done
-for p in /var/mobile/Media/PhigrosAuto.log /var/mobile/PhigrosAuto.log /tmp/PhigrosAuto.log ; do
+for p in /var/mobile/Media/PhigrosAuto.log /var/mobile/PhigrosAuto.log /tmp/PhigrosAuto.log; do
   [ -f "$p" ] && LOGS="$LOGS $p"
 done
-
 if [ -n "$LOGS" ]; then
-  for p in $LOGS ; do
+  for p in $LOGS; do
     echo "    ---- $p ----"
-    cat "$p"
+    tail -40 "$p"
     echo "    ---- end ----"
   done
 else
   echo "    没有日志文件"
 fi
 
-# ---------- 5. 游戏进程 ----------
+# ---------- 10. 游戏进程 ----------
 echo
-echo "[5] 游戏进程"
+echo "[10] 游戏进程"
 if killall -0 Phigros 2>/dev/null; then
   echo "    Phigros 正在运行"
   GAME_UP=1
 else
   echo "    Phigros 没在运行"
-  GAME_UP=0
-fi
-
-# ---------- 5b. 真实 bundle id（关键） ----------
-echo
-echo "[5b] 游戏真实 bundle id（对照 plist 的 Filter）"
-APPBIN=""
-for p in /var/containers/Bundle/Application/*/Phigros.app/Phigros \
-         /private/var/containers/Bundle/Application/*/Phigros.app/Phigros ; do
-  [ -f "$p" ] && APPBIN="$p"
-done
-
-if [ -n "$APPBIN" ]; then
-  APP_DIR=$(dirname "$APPBIN")
-  echo "    路径: $APP_DIR"
-  # Info.plist 可能是二进制格式，优先 plutil，没有就 strings 兜底
-  if command -v plutil >/dev/null 2>&1; then
-    BID=$(plutil -extract CFBundleIdentifier raw "$APP_DIR/Info.plist" 2>/dev/null)
-  fi
-  if [ -z "$BID" ]; then
-    BID=$(strings "$APP_DIR/Info.plist" 2>/dev/null | grep -E '^[a-zA-Z0-9]+\.[a-zA-Z0-9.-]+$' | head -1)
-  fi
-  [ -z "$BID" ] && BID=$(grep -a -o 'com\.[A-Za-z0-9._-]*' "$APP_DIR/Info.plist" 2>/dev/null | head -1)
-  echo "    CFBundleIdentifier = ${BID:-(读不出)}"
-
-  PLIST_BID=$(grep -o '"[^"]*\.[^"]*"' "$DL/PhigrosAuto.plist" 2>/dev/null | tr -d '"' | head -1)
-  echo "    plist 里写的      = ${PLIST_BID:-(空)}"
-  if [ -n "$BID" ] && [ -n "$PLIST_BID" ] && [ "$BID" != "$PLIST_BID" ]; then
-    echo "    !!! 不匹配 —— 这就是没注入的直接原因 !!!"
-    BID_MISMATCH=1
-  fi
-else
-  echo "    找不到 Phigros.app，无法读取 bundle id"
 fi
 
 # ---------- 结论 ----------
@@ -133,29 +213,27 @@ echo "=============================================="
 echo " 结论"
 echo "=============================================="
 if [ "$GAME_UP" = "0" ]; then
-  echo " 游戏没开。先打开 Phigros 停在主界面，再跑一次 phprobe。"
+  echo " 游戏没开。打开 Phigros 停在主界面，再跑一次 phprobe。"
 elif [ "$INJECTED" = "1" ]; then
   echo " A) dylib 已注入并执行 —— 注入链路正常。"
   if [ -n "$LOGS" ]; then
-    echo "    日志在上面第 4 节，看最后几行判断卡在哪。"
+    echo "    看第 9 节日志最后几行，判断卡在哪一步。"
   else
-    echo "    但日志没写成功，说明是写文件权限问题，看心跳标记即可证明注入 OK。"
+    echo "    日志没写成功，但心跳已证明注入 OK。"
   fi
 else
-  echo " B) dylib 没注入。真正的可疑点按可能性排序："
+  echo " B) dylib 未注入。按可能性排序处理："
   echo
-  if [ "$BID_MISMATCH" = "1" ]; then
-    echo "   ★ 第一位：bundle id 不匹配（见 5b 节）"
-    echo "     plist 写的是 $PLIST_BID，游戏实际是 $BID"
-    echo "     => 把 plist 改成实际值，或告诉我实际值，我重新打包。"
+  if [ -n "$RH_HITS" ]; then
+    echo "   ★1 RootHide 可能屏蔽了这个 App（见第 4 节）"
+    echo "      RootHide 设置里把 Phigros 从隐藏名单移除"
   fi
-  echo "   1. filter plist 内容："
-  echo "      cat $DL/PhigrosAuto.plist"
-  echo "   2. rootHide 补丁链接（被重定位就没法常规注入）："
-  echo "      ls -l $DL/ | grep -i phigros"
-  echo "   3. 桌面未重启（注入只发生在进程启动瞬间）："
-  echo "      killall -9 SpringBoard"
-  echo "   4. 装完后游戏是从后台恢复而不是冷启动："
-  echo "      从多任务里彻底划掉 Phigros，再重新打开"
+  if [ "$BID_MISMATCH" = "1" ]; then
+    echo "   ★2 bundle id 不匹配（见第 7 节）：plist=$PLIST_BID 实际=$BID"
+  fi
+  echo "   3. 游戏必须冷启动：从多任务里彻底划掉，再重新打开"
+  echo "      （刚从后台切回来不会注入）"
+  echo "   4. 桌面重启：killall -9 SpringBoard"
+  echo "   5. 若 Sileo 里装了多份，先全部卸载再只装最新一份"
 fi
 echo "=============================================="
