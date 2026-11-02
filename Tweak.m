@@ -129,10 +129,29 @@ static void PHStartTicker(void) {
 @end
 
 static PHPanel *gPanel;
+static int gBootTries = 0;
 
 // ============================================================
 // 入口
 // ============================================================
+
+// 等游戏场景起来：每 0.5s 试一次，最多 60s。
+// 用静态函数递归而不是自捕获 block，避免 ARC 下的 retain cycle。
+static void PHPollScene(void) {
+    if (PHModelResolve()) {
+        PHStartTicker();
+        NSLog(@"[PhigrosAuto] ready — %s", PHModelShared()->managerName);
+        return;
+    }
+    if (++gBootTries > 120) {
+        NSLog(@"[PhigrosAuto] 放弃探测，跑 discover.js 取真实类名");
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        PHPollScene();
+    });
+}
 
 static void PHBootstrap(void) {
     if (!PHL2CPPInit()) {
@@ -141,23 +160,7 @@ static void PHBootstrap(void) {
     }
     PHTouchInit();
 
-    // 等游戏场景起来：每 0.5s 试一次，最多 60s
-    __block int tries = 0;
-    __block void (^poll)(void);
-    poll = ^{
-        if (PHModelResolve()) {
-            PHStartTicker();
-            NSLog(@"[PhigrosAuto] ready — %s", PHModelShared()->managerName);
-            return;
-        }
-        if (++tries > 120) {
-            NSLog(@"[PhigrosAuto] 放弃探测，跑 discover.js 取真实类名");
-            return;
-        }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), poll);
-    };
-    poll();
+    PHPollScene();
 
     if (!gPanel) {
         gPanel = [[PHPanel alloc] init];
