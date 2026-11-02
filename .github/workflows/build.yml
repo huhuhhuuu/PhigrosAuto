@@ -105,27 +105,33 @@ jobs:
             echo "::error::没有生成 deb"; exit 1
           fi
 
+          # 先落盘再做匹配：管道里直接 grep -q 会提前关闭读端，
+          # 上游 dpkg-deb 收到 SIGPIPE，pipefail 下整条管道会被判为失败。
+          dpkg-deb -f "$DEB" Architecture > /tmp/arch.txt 2>&1
+          dpkg-deb -c "$DEB"        > /tmp/list.txt 2>&1
+
           check () {  # $1=描述 $2=命令
             if eval "$2"; then echo "OK   $1"; else echo "::error::FAIL $1"; FAIL=1; fi
           }
 
-          # 架构必须是 iphoneos-arm64（rootless 唯一形态）
+          echo "Architecture: $(cat /tmp/arch.txt)"
           check "Architecture=iphoneos-arm64" \
-                "dpkg-deb -f '$DEB' Architecture | grep -qx 'iphoneos-arm64'"
-          # 包内文件必须落在 /var/jb 前缀下
+                "grep -qx 'iphoneos-arm64' /tmp/arch.txt"
           check "包内含 /var/jb/ 前缀" \
-                "dpkg-deb -c '$DEB' | grep -q '/var/jb/'"
-          # dylib 与 plist 必须都在 DynamicLibraries 里
+                "grep -q '/var/jb/' /tmp/list.txt"
           check "含 PhigrosAuto.dylib" \
-                "dpkg-deb -c '$DEB' | grep -q 'DynamicLibraries/PhigrosAuto.dylib'"
+                "grep -q 'DynamicLibraries/PhigrosAuto.dylib' /tmp/list.txt"
           check "含 PhigrosAuto.plist" \
-                "dpkg-deb -c '$DEB' | grep -q 'DynamicLibraries/PhigrosAuto.plist'"
-          # dylib 里必须同时有 arm64 与 arm64e 切片（设备是 arm64e）
-          ARCHS_HIT=$(dpkg-deb -x "$DEB" /tmp/debx 2>/dev/null && \
-                      find /tmp/debx -name 'PhigrosAuto.dylib' -exec lipo -archs {} \; 2>/dev/null)
+                "grep -q 'DynamicLibraries/PhigrosAuto.plist' /tmp/list.txt"
+
+          # dylib 必须含 arm64e 切片（A17 Pro 的设备架构）
+          rm -rf /tmp/debx && mkdir -p /tmp/debx
+          dpkg-deb -x "$DEB" /tmp/debx 2>/dev/null
+          ARCHS_HIT=$(find /tmp/debx -name 'PhigrosAuto.dylib' -exec lipo -archs {} \; 2>/dev/null)
           echo "dylib archs: ${ARCHS_HIT:-unknown}"
           check "dylib 含 arm64e 切片" "echo '$ARCHS_HIT' | grep -q arm64e"
 
+          echo "--- verify result: FAIL=$FAIL ---"
           exit $FAIL
 
       # 无论成败都把日志与包信息写回仓库，便于在没有 admin 权限时排查
