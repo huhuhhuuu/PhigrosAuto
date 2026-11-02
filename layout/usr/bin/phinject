@@ -1,0 +1,120 @@
+#!/bin/sh
+# phinject —— 注入链专项诊断
+#
+# 目的：回答"为什么一个 dylib 都没被注入"。
+# 与 PhigrosAuto 的代码无关，问题在注入器层面。
+#
+# 你这台机器的特点（从 phprobe 输出可见）：
+#   · DynamicLibraries -> /usr/lib/TweakInject
+#   · 绝大多数 dylib 旁边都有 .roothidepatch 标记
+#   · 装了 roothide 0.0.9 / patchloader 0.0.8 / patcher 2.1.4
+# 说明 RootHide 接管了加载。RootHide 不像 ElleKit 那样逐个进程
+# interpose，而是在启动时把所有需要路径重定位的 dylib 汇成一个
+# AutoPatches.dylib。新装的插件若没进这份汇总，就等于不存在。
+
+DL=/var/jb/Library/MobileSubstrate/DynamicLibraries
+TI=/var/jb/usr/lib/TweakInject
+AP=/var/jb/usr/lib/DynamicPatches/AutoPatches.dylib
+
+echo "=============================================="
+echo " 注入链诊断"
+echo "=============================================="
+
+# ---------- 1. 最关键：AutoPatches 里有没有我们的 dylib ----------
+echo
+echo "[1] ★ AutoPatches.dylib 是否收录了我们的插件"
+if [ -f "$AP" ]; then
+  echo "    文件: $AP"
+  echo "    大小: $(wc -c < "$AP" 2>/dev/null) 字节"
+  echo "    时间: $(ls -l "$AP" 2>/dev/null | awk '{print $6" "$7" "$8}')"
+  for n in PhigrosAuto PHProbe ; do
+    if strings "$AP" 2>/dev/null | grep -q "$n"; then
+      echo "    收录 $n : 是"
+    else
+      echo "    收录 $n : !! 没有"
+      MISSING_PATCH=1
+    fi
+  done
+  if [ "${MISSING_PATCH:-0}" = "1" ]; then
+    echo
+    echo "    => RootHide 的补丁表里没有我们的 dylib，等于不存在。"
+    echo "       需要让 patchloader 重新生成，通常靠完整重启设备。"
+  fi
+else
+  echo "    !! $AP 不存在"
+  echo "    => RootHide 补丁表根本没生成，所有插件都不会注入。"
+  MISSING_PATCH=1
+fi
+
+# ---------- 2. 我们的文件与标记 ----------
+echo
+echo "[2] 我们的文件"
+for f in "$DL/PhigrosAuto.dylib" "$DL/PhigrosAuto.dylib.roothidepatch" \
+         "$DL/PhigrosAuto.plist" \
+         "$DL/PHProbe.dylib" "$DL/PHProbe.dylib.roothidepatch" \
+         "$DL/PHProbe.plist" ; do
+  if [ -e "$f" ]; then
+    echo "    OK  $(basename "$f")  $(wc -c < "$f" 2>/dev/null) 字节"
+  else
+    echo "    无  $(basename "$f")"
+  fi
+done
+
+# ---------- 3. patchloader 进程 ----------
+echo
+echo "[3] patchloader 是否在跑"
+for n in patchloader roothide jbinit launchd ; do
+  if killall -0 "$n" 2>/dev/null; then
+    echo "    运行中: $n"
+    [ "$n" = "patchloader" ] && PATCHRUN=1
+  fi
+done
+[ "${PATCHRUN:-0}" = "0" ] && echo "    !! patchloader 没在运行"
+
+# ---------- 4. launchd 里的注入相关 Job ----------
+echo
+echo "[4] 注入相关 LaunchDaemon"
+C=0
+for d in /var/jb/Library/LaunchDaemons /Library/LaunchDaemons ; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*.plist ; do
+    [ -f "$f" ] || continue
+    case "$(basename "$f")" in
+      *ellekit*|*substrate*|*roothide*|*patchloader*|*inject*|*jbinit*)
+        echo "    $(basename "$f")"
+        C=$((C+1)) ;;
+    esac
+  done
+done
+[ "$C" = "0" ] && echo "    !! 一个都没有"
+
+# ---------- 5. 目录真实指向 ----------
+echo
+echo "[5] 目录解析"
+echo "    $DL"
+echo "      -> $(readlink -f "$DL" 2>/dev/null || readlink "$DL" 2>/dev/null || echo '非链接')"
+echo "    TweakInject 条目数: $(ls -1 "$TI" 2>/dev/null | wc -l | tr -d ' ')"
+
+# ---------- 6. 系统 ----------
+echo
+echo "[6] 系统"
+echo "    iOS: $(sw_vers -productVersion 2>/dev/null || echo 未知)"
+echo "    rootless 布局: $([ -d /var/jb ] && echo 是 || echo 否)"
+
+# ---------- 结论 ----------
+echo
+echo "=============================================="
+echo " 结论"
+echo "=============================================="
+if [ "${MISSING_PATCH:-0}" = "1" ]; then
+  echo " 根因：RootHide 的补丁表（AutoPatches.dylib）没有收录我们的"
+  echo " dylib，或无该文件 —— 插件在 RootHide 体系里等于不存在。"
+  echo
+  echo " 处理：完整重启设备（不是 respring，是关机再开机）。"
+  echo " RootHide 只在启动阶段生成补丁表，装完插件不重启就不会生效。"
+  echo " 重启后再跑 phprobe，看 [6] 节的 marker 是否出现。"
+else
+  echo " 补丁表里已收录我们的 dylib。若仍无 marker，说明加载被"
+  echo " 更上层拦住了，把本文件全部输出发我。"
+fi
+echo "=============================================="

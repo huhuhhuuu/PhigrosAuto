@@ -13,11 +13,15 @@
 // 用途：和 PhigrosAuto 一起装进同一个 deb，做一次二元实验：
 //
 //   PHProbe.marker 出现 + PhigrosAuto.marker 不出现
-//     => ElleKit 注入链正常，问题在 Phigros 的 filter 匹配
+//     => 注入链正常，问题在 Phigros 的 filter 匹配
 //        （bundle id 不对 / 被 RootHide 屏蔽 / 游戏没冷启动）
 //
 //   两个 marker 都不出现
-//     => ElleKit 注入链本身是坏的，与插件代码无关
+//     => 注入链本身是坏的，与插件代码无关
+//
+// 实测结论：两个都不出现。你这台机器跑的是完整 RootHide 栈，
+// 它把加载路径重定位后汇进 AutoPatches.dylib，新装的插件若没进
+// 那份汇总就永远不会被加载 —— 装完必须完整重启设备才生效。
 //
 // SpringBoard 是 root 进程，可以写 /var/mobile/Media，不需要沙盒回退。
 // ============================================================
