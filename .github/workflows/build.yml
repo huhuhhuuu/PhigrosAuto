@@ -64,10 +64,14 @@ jobs:
           set -e
           if ! command -v dpkg-deb >/dev/null 2>&1; then brew install dpkg; fi
           dpkg-deb --version | head -1
-          # Theos 打包需要 fakeroot 或等效手段；缺了就装
-          if ! command -v fakeroot >/dev/null 2>&1; then
-            brew install fakeroot 2>/dev/null || echo "fakeroot 不可用，Theos 将用 dpkg-deb 直接打包"
+          # 注意：不要装 homebrew 的 fakeroot。它编的是 arm64 的 libfakeroot.dylib，
+          # 在 arm64e 进程里会被 dyld 拒绝加载并 Abort trap 6，导致 make package 直接失败。
+          # Theos 在缺少 fakeroot 时会退回 _theos_fake_root，一样能出 deb。
+          if command -v fakeroot >/dev/null 2>&1; then
+            echo "检测到 fakeroot，移除（arm64/arm64e 不兼容）"
+            brew uninstall --ignore-dependencies fakeroot 2>/dev/null || true
           fi
+          echo "fakeroot: $(command -v fakeroot || echo none)"
 
       - name: Build rootless
         id: build
