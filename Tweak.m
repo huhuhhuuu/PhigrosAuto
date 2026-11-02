@@ -62,6 +62,9 @@ typedef NS_ENUM(NSInteger, PHState) {
 - (void)show;
 - (void)refresh;
 - (void)setState:(PHState)s detail:(NSString *)detail;
+- (BOOL)attachSceneIfNeeded;
+- (void)makeReal;
+- (void)retryShow;
 @end
 
 @implementation PHPanel
@@ -107,21 +110,58 @@ typedef NS_ENUM(NSInteger, PHState) {
     return self;
 }
 
-// iOS 13+ 的 overlay window 必须挂到 windowScene 才会真正显示
-- (void)show {
-    if (@available(iOS 13.0, *)) {
-        if (!self.windowScene) {
-            for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-                if ([s isKindOfClass:[UIWindowScene class]] &&
-                    s.activationState == UISceneActivationStateForegroundActive) {
-                    self.windowScene = (UIWindowScene *)s;
-                    break;
-                }
+// iOS 13+ 的 overlay window 必须挂到 windowScene 才会真正显示。
+// 关键坑：插件注入很早，首次 show 时可能整个 App 还没有任何
+// ForegroundActive 的 UIWindowScene，此时挂不上，窗口就永远不显示。
+// 所以这里不能只试一次 —— 挂不上就重试，直到成功。
+- (BOOL)attachSceneIfNeeded {
+    if (!self.windowScene) {
+        for (UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]] &&
+                s.activationState == UISceneActivationStateForegroundActive) {
+                self.windowScene = (UIWindowScene *)s;
+                break;
             }
         }
     }
+    return self.windowScene != nil;
+}
+
+- (void)show {
+    if (@available(iOS 13.0, *)) {
+        if (![self attachSceneIfNeeded]) {
+            [self retryShow];
+            return;
+        }
+    }
+    [self makeReal];
+}
+
+- (void)makeReal {
     self.hidden = NO;
+    // 某些 Unity 版本会把 key window 抢回去，强制拉到最前
+    self.rootViewController.view.hidden = NO;
     [self refresh];
+    PHLogWrite(@"panel shown (scene=%s)", self.windowScene ? "yes" : "no");
+}
+
+- (void)retryShow {
+    static int tries = 0;
+    if (tries > 100) {   // 25 秒还没场景，说明不是启动慢的问题
+        PHLogWrite(@"panel 无法挂载 windowScene（重试 %d 次后放弃）", tries);
+        return;
+    }
+    tries++;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) s = weakSelf;
+        if (!s) return;
+        if (@available(iOS 13.0, *)) {
+            if (![s attachSceneIfNeeded]) { [s retryShow]; return; }
+        }
+        [s makeReal];
+    });
 }
 
 - (void)onTap {
@@ -222,7 +262,10 @@ static void PHEnsurePanel(void) {
     [gPanel show];
 }
 
-// 等游戏场景起来：每 0.5s 试一次，最多 60s。
+// 慢速轮询：只在还没解析出管理器时用，进到游玩界面就会命中
+static void PHPollSceneSlow(void);
+
+// 等游戏场景起来：每 0.5s 试一次。
 // 用静态函数递归而不是自捕获 block，避免 ARC 下的 retain cycle。
 static void PHPollScene(void) {
     if (PHModelResolve()) {
@@ -233,8 +276,15 @@ static void PHPollScene(void) {
         return;
     }
     if (++gBootTries > 120) {
-        PHLogWrite(@"放弃探测，跑 discover.js 取真实类名");
-        [gPanel setState:PHStateNoClass detail:@"探测 60s 未命中候选类名"];
+        // Unity 启动慢 / 还在加载页面时不要彻底放弃：降频继续等，
+        // 否则"进游戏晚了一点"会永久性地变成"插件没反应"。
+        PHLogWrite(@"60s 未命中候选类名，降频继续（每 2s 一次）");
+        [gPanel setState:PHStateNoClass detail:@"未命中候选类名，仍在等待"];
+        gBootTries = 0;   // 重新计数，下面走慢速轮询
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            PHPollSceneSlow();
+        });
         return;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
@@ -243,22 +293,51 @@ static void PHPollScene(void) {
     });
 }
 
-static void PHBootstrap(void) {
-    PHLogWrite(@"bootstrap start");
-
-    // 面板先出来，再谈能不能干活
-    PHEnsurePanel();
-
-    if (!PHL2CPPInit()) {
-        PHLogWrite(@"il2cpp 绑定失败，检查 UnityFramework 是否已加载");
-        [gPanel setState:PHStateNoIl2CPP detail:@"dlsym 拿不到 il2cpp 符号"];
+// 慢速轮询：只在还没解析出管理器时用，进到游玩界面就会命中
+static void PHPollSceneSlow(void) {
+    if (PHModelResolve()) {
+        PHStartTicker();
+        PHModel *m = PHModelShared();
+        PHLogWrite(@"ready — %s", m->managerName);
+        [gPanel setState:PHStateReady detail:[NSString stringWithUTF8String:m->managerName]];
         return;
     }
-    PHLogWrite(@"il2cpp 绑定成功");
-    PHTouchInit();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        PHPollSceneSlow();
+    });
+}
 
-    [gPanel setState:PHStateBooting detail:@"开始探测谱面管理器"];
-    PHPollScene();
+// 绑不到 il2cpp 时不放弃：UnityFramework 是游戏启动后才 dlopen 的，
+// 早绑定必然失败，必须持续重试直到它出现。
+static void PHWaitForIl2CPP(int attempt) {
+    if (PHL2CPPInit()) {
+        PHLogWrite(@"il2cpp 绑定成功（第 %d 次尝试）%s", attempt, PHL2CPPDiagnose());
+        PHTouchInit();
+        [gPanel setState:PHStateBooting detail:@"开始探测谱面管理器"];
+        PHPollScene();
+        return;
+    }
+    if (attempt == 1 || attempt % 10 == 0) {
+        PHLogWrite(@"il2cpp 尚未就绪（第 %d 次）%s", attempt, PHL2CPPDiagnose());
+    }
+    // 前 20 次 0.25s 一次（启动阶段），之后 1s 一次
+    double delay = attempt < 20 ? 0.25 : 1.0;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        PHWaitForIl2CPP(attempt + 1);
+    });
+}
+
+static void PHBootstrap(void) {
+    PHLogWrite(@"bootstrap start %s", PHL2CPPDiagnose());
+
+    // 面板先出来，再谈能不能干活。
+    // 面板本身不依赖 il2cpp，必须无条件显示 —— 否则"看不到球"
+    // 就分不清是没注入还是 il2cpp 没绑上。
+    PHEnsurePanel();
+
+    PHWaitForIl2CPP(1);
 }
 
 __attribute__((constructor))

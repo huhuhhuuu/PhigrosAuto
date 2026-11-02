@@ -5,6 +5,7 @@
 // 因此进程内 dlsym(RTLD_DEFAULT, ...) 即可拿到，无需链接静态库。
 
 BOOL   PHL2CPPInit(void);                               // 绑定符号，成功返回 YES
+const char *PHL2CPPDiagnose(void);                      // 诊断串：已加载镜像数 / UnityFramework 是否找到
 
 void  *PHImageByName(const char *assemblyName);          // "Assembly-CSharp"（不含 .dll）
 void  *PHFindClass(const char *ns, const char *name);    // 全 image 扫描，命中返回 Il2CppClass*
